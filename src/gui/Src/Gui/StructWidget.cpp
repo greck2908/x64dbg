@@ -73,13 +73,13 @@ void StructWidget::typeAddNode(void* parent, const TYPEDESCRIPTOR* type)
     QVariant var;
     var.setValue(dtype);
     item->setData(0, Qt::UserRole, var);
-    Bridge::getBridge()->setResult(BridgeResult::TypeAddNode, dsint(item));
+    Bridge::getBridge()->setResult(dsint(item));
 }
 
 void StructWidget::typeClear()
 {
     ui->treeWidget->clear();
-    Bridge::getBridge()->setResult(BridgeResult::TypeClear);
+    Bridge::getBridge()->setResult();
 }
 
 void StructWidget::typeUpdateWidget()
@@ -128,7 +128,7 @@ void StructWidget::typeUpdateWidget()
 void StructWidget::dbgStateChangedSlot(DBGSTATE state)
 {
     if(state == stopped)
-        ui->treeWidget->clear();
+        typeClear();
 }
 
 void StructWidget::setupColumns()
@@ -178,7 +178,7 @@ void StructWidget::followDumpSlot()
 {
     if(!hasSelection)
         return;
-    DbgCmdExec(QString("dump %1").arg(ToPtrString(selectedType.addr + selectedType.offset)));
+    DbgCmdExec(QString("dump %1").arg(ToPtrString(selectedType.addr + selectedType.offset)).toUtf8().constData());
 }
 
 void StructWidget::clearSlot()
@@ -206,7 +206,7 @@ void StructWidget::visitSlot()
     mGotoDialog->setWindowTitle(tr("Address to visit"));
     if(DbgIsDebugging() && mGotoDialog->exec() == QDialog::Accepted)
         addr = DbgValFromString(mGotoDialog->expressionText.toUtf8().constData());
-    DbgCmdExec(QString("VisitType %1, %2").arg(mLineEdit.editText, ToPtrString(addr)));
+    DbgCmdExec(QString("VisitType %1, %2").arg(mLineEdit.editText, ToPtrString(addr)).toUtf8().constData());
 }
 
 void StructWidget::loadJsonSlot()
@@ -215,7 +215,7 @@ void StructWidget::loadJsonSlot()
     if(!filename.length())
         return;
     filename = QDir::toNativeSeparators(filename);
-    DbgCmdExec(QString("LoadTypes \"%1\"").arg(filename));
+    DbgCmdExec(QString("LoadTypes \"%1\"").arg(filename).toUtf8().constData());
 }
 
 void StructWidget::parseFileSlot()
@@ -224,7 +224,7 @@ void StructWidget::parseFileSlot()
     if(!filename.length())
         return;
     filename = QDir::toNativeSeparators(filename);
-    DbgCmdExec(QString("ParseTypes \"%1\"").arg(filename));
+    DbgCmdExec(QString("ParseTypes \"%1\"").arg(filename).toUtf8().constData());
 }
 
 static void changeTypeAddr(QTreeWidgetItem* item, duint addr)

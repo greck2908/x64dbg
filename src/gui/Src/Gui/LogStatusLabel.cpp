@@ -4,6 +4,9 @@
 
 LogStatusLabel::LogStatusLabel(QStatusBar* parent) : QLabel(parent)
 {
+    this->setFrameStyle(QFrame::Sunken | QFrame::Panel); //sunken style
+    this->setStyleSheet("QLabel { background-color : #C0C0C0; }");
+
     this->setTextFormat(Qt::PlainText);
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     connect(Bridge::getBridge(), SIGNAL(addMsgToLog(QByteArray)), this, SLOT(logUpdateUtf8(QByteArray)));
@@ -77,5 +80,5 @@ void LogStatusLabel::getActiveView(ACTIVEVIEW* active)
     QWidget* now = QApplication::focusWidget();
     strncpy_s(active->title, findTitle(now, active->titleHwnd).toUtf8().constData(), _TRUNCATE);
     strncpy_s(active->className, className(now, active->classHwnd).toUtf8().constData(), _TRUNCATE);
-    Bridge::getBridge()->setResult(BridgeResult::GetActiveView);
+    Bridge::getBridge()->setResult();
 }

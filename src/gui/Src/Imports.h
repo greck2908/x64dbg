@@ -11,10 +11,4 @@
 #include "dbg_types.h"
 #endif
 
-// Convenience overloads
-class QString;
-
-void DbgCmdExec(const QString & cmd);
-bool DbgCmdExecDirect(const QString & cmd);
-
 #endif // IMPORTS_H

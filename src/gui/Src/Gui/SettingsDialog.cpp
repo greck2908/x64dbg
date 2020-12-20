@@ -17,6 +17,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) :
     adjustSize();
     bTokenizerConfigUpdated = false;
     bDisableAutoCompleteUpdated = false;
+    bAsciiAddressDumpModeUpdated = false;
     LoadSettings(); //load settings from file
     connect(Bridge::getBridge(), SIGNAL(setLastException(uint)), this, SLOT(setLastException(uint)));
     lastException = 0;
@@ -56,8 +57,7 @@ void SettingsDialog::LoadSettings()
     settings.eventSystemBreakpoint = true;
     settings.eventTlsCallbacks = true;
     settings.eventEntryBreakpoint = true;
-    settings.eventNtTerminateProcess = false;
-    settings.engineType = DebugEngineTitanEngine;
+    settings.eventAttachBreakpoint = true;
     settings.engineCalcType = calc_unsigned;
     settings.engineBreakpointType = break_int3short;
     settings.engineUndecorateSymbolNames = true;
@@ -67,7 +67,6 @@ void SettingsDialog::LoadSettings()
     settings.engineIgnoreInconsistentBreakpoints = false;
     settings.engineNoWow64SingleStepWorkaround = false;
     settings.engineMaxTraceCount = 50000;
-    settings.engineAnimateInterval = 50;
     settings.engineHardcoreThreadSwitchWarning = false;
     settings.engineVerboseExceptionLogging = true;
     settings.exceptionRanges = &realExceptionRanges;
@@ -80,42 +79,32 @@ void SettingsDialog::LoadSettings()
     settings.disasmTabBetweenMnemonicAndArguments = false;
     settings.disasmNoCurrentModuleText = false;
     settings.disasm0xPrefixValues = false;
-    settings.disasmNoBranchDisasmPreview = false;
     settings.disasmNoSourceLineAutoComments = false;
     settings.disasmMaxModuleSize = -1;
     settings.guiNoForegroundWindow = true;
-    settings.guiLoadSaveTabOrder = true;
     settings.guiDisableAutoComplete = false;
-    settings.guiAutoFollowInStack = false;
+    settings.guiAsciiAddressDumpMode = false;
 
     //Events tab
     GetSettingBool("Events", "SystemBreakpoint", &settings.eventSystemBreakpoint);
-    GetSettingBool("Events", "NtTerminateProcess", &settings.eventNtTerminateProcess);
     GetSettingBool("Events", "TlsCallbacks", &settings.eventTlsCallbacks);
-    GetSettingBool("Events", "TlsCallbacksSystem", &settings.eventTlsCallbacksSystem);
     GetSettingBool("Events", "EntryBreakpoint", &settings.eventEntryBreakpoint);
     GetSettingBool("Events", "DllEntry", &settings.eventDllEntry);
-    GetSettingBool("Events", "DllEntrySystem", &settings.eventDllEntrySystem);
     GetSettingBool("Events", "ThreadEntry", &settings.eventThreadEntry);
+    GetSettingBool("Events", "AttachBreakpoint", &settings.eventAttachBreakpoint);
     GetSettingBool("Events", "DllLoad", &settings.eventDllLoad);
     GetSettingBool("Events", "DllUnload", &settings.eventDllUnload);
-    GetSettingBool("Events", "DllLoadSystem", &settings.eventDllLoadSystem);
-    GetSettingBool("Events", "DllUnloadSystem", &settings.eventDllUnloadSystem);
     GetSettingBool("Events", "ThreadStart", &settings.eventThreadStart);
     GetSettingBool("Events", "ThreadEnd", &settings.eventThreadEnd);
     GetSettingBool("Events", "DebugStrings", &settings.eventDebugStrings);
     ui->chkSystemBreakpoint->setCheckState(bool2check(settings.eventSystemBreakpoint));
-    ui->chkNtTerminateProcess->setCheckState(bool2check(settings.eventNtTerminateProcess));
     ui->chkTlsCallbacks->setCheckState(bool2check(settings.eventTlsCallbacks));
-    ui->chkTlsCallbacksSystem->setCheckState(bool2check(settings.eventTlsCallbacksSystem));
     ui->chkEntryBreakpoint->setCheckState(bool2check(settings.eventEntryBreakpoint));
     ui->chkDllEntry->setCheckState(bool2check(settings.eventDllEntry));
-    ui->chkDllEntrySystem->setCheckState(bool2check(settings.eventDllEntrySystem));
     ui->chkThreadEntry->setCheckState(bool2check(settings.eventThreadEntry));
+    ui->chkAttachBreakpoint->setCheckState(bool2check(settings.eventAttachBreakpoint));
     ui->chkDllLoad->setCheckState(bool2check(settings.eventDllLoad));
     ui->chkDllUnload->setCheckState(bool2check(settings.eventDllUnload));
-    ui->chkDllLoadSystem->setCheckState(bool2check(settings.eventDllLoadSystem));
-    ui->chkDllUnloadSystem->setCheckState(bool2check(settings.eventDllUnloadSystem));
     ui->chkThreadStart->setCheckState(bool2check(settings.eventThreadStart));
     ui->chkThreadEnd->setCheckState(bool2check(settings.eventThreadEnd));
     ui->chkDebugStrings->setCheckState(bool2check(settings.eventDebugStrings));
@@ -131,10 +120,6 @@ void SettingsDialog::LoadSettings()
             settings.engineCalcType = (CalcType)cur;
             break;
         }
-    }
-    if(BridgeSettingGetUint("Engine", "DebugEngine", &cur))
-    {
-        settings.engineType = (DEBUG_ENGINE)cur;
     }
     if(BridgeSettingGetUint("Engine", "BreakpointType", &cur))
     {
@@ -161,8 +146,6 @@ void SettingsDialog::LoadSettings()
     GetSettingBool("Engine", "NoWow64SingleStepWorkaround", &settings.engineNoWow64SingleStepWorkaround);
     if(BridgeSettingGetUint("Engine", "MaxTraceCount", &cur))
         settings.engineMaxTraceCount = int(cur);
-    if(BridgeSettingGetUint("Engine", "AnimateInterval", &cur))
-        settings.engineAnimateInterval = int(cur);
     switch(settings.engineCalcType)
     {
     case calc_signed:
@@ -170,15 +153,6 @@ void SettingsDialog::LoadSettings()
         break;
     case calc_unsigned:
         ui->radioUnsigned->setChecked(true);
-        break;
-    }
-    switch(settings.engineType)
-    {
-    case DebugEngineTitanEngine:
-        ui->radioTitanEngine->setChecked(true);
-        break;
-    case DebugEngineGleeBug:
-        ui->radioGleeBug->setChecked(true);
         break;
     }
     switch(settings.engineBreakpointType)
@@ -206,7 +180,6 @@ void SettingsDialog::LoadSettings()
     ui->chkVerboseExceptionLogging->setChecked(settings.engineVerboseExceptionLogging);
     ui->chkNoWow64SingleStepWorkaround->setChecked(settings.engineNoWow64SingleStepWorkaround);
     ui->spinMaxTraceCount->setValue(settings.engineMaxTraceCount);
-    ui->spinAnimateInterval->setValue(settings.engineAnimateInterval);
 
     //Exceptions tab
     char exceptionRange[MAX_SETTING_SIZE] = "";
@@ -239,7 +212,6 @@ void SettingsDialog::LoadSettings()
     GetSettingBool("Disassembler", "PermanentHighlightingMode", &settings.disasmPermanentHighlightingMode);
     GetSettingBool("Disassembler", "NoCurrentModuleText", &settings.disasmNoCurrentModuleText);
     GetSettingBool("Disassembler", "0xPrefixValues", &settings.disasm0xPrefixValues);
-    GetSettingBool("Disassembler", "NoBranchDisasmPreview", &settings.disasmNoBranchDisasmPreview);
     GetSettingBool("Disassembler", "NoSourceLineAutoComments", &settings.disasmNoSourceLineAutoComments);
     if(BridgeSettingGetUint("Disassembler", "MaxModuleSize", &cur))
         settings.disasmMaxModuleSize = int(cur);
@@ -254,7 +226,6 @@ void SettingsDialog::LoadSettings()
     ui->chkPermanentHighlightingMode->setChecked(settings.disasmPermanentHighlightingMode);
     ui->chkNoCurrentModuleText->setChecked(settings.disasmNoCurrentModuleText);
     ui->chk0xPrefixValues->setChecked(settings.disasm0xPrefixValues);
-    ui->chkNoBranchDisasmPreview->setChecked(settings.disasmNoBranchDisasmPreview);
     ui->chkNoSourceLinesAutoComments->setChecked(settings.disasmNoSourceLineAutoComments);
     ui->spinMaximumModuleNameSize->setValue(settings.disasmMaxModuleSize);
 
@@ -262,27 +233,25 @@ void SettingsDialog::LoadSettings()
     GetSettingBool("Gui", "FpuRegistersLittleEndian", &settings.guiFpuRegistersLittleEndian);
     GetSettingBool("Gui", "SaveColumnOrder", &settings.guiSaveColumnOrder);
     GetSettingBool("Gui", "NoCloseDialog", &settings.guiNoCloseDialog);
-    GetSettingBool("Gui", "PidTidInHex", &settings.guiPidTidInHex);
+    GetSettingBool("Gui", "PidInHex", &settings.guiPidInHex);
     GetSettingBool("Gui", "SidebarWatchLabels", &settings.guiSidebarWatchLabels);
     GetSettingBool("Gui", "NoForegroundWindow", &settings.guiNoForegroundWindow);
     GetSettingBool("Gui", "LoadSaveTabOrder", &settings.guiLoadSaveTabOrder);
     GetSettingBool("Gui", "ShowGraphRva", &settings.guiShowGraphRva);
-    GetSettingBool("Gui", "GraphZoomMode", &settings.guiGraphZoomMode);
     GetSettingBool("Gui", "ShowExitConfirmation", &settings.guiShowExitConfirmation);
     GetSettingBool("Gui", "DisableAutoComplete", &settings.guiDisableAutoComplete);
-    GetSettingBool("Gui", "AutoFollowInStack", &settings.guiAutoFollowInStack);
+    GetSettingBool("Gui", "AsciiAddressDumpMode", &settings.guiAsciiAddressDumpMode);
     ui->chkFpuRegistersLittleEndian->setChecked(settings.guiFpuRegistersLittleEndian);
     ui->chkSaveColumnOrder->setChecked(settings.guiSaveColumnOrder);
     ui->chkNoCloseDialog->setChecked(settings.guiNoCloseDialog);
-    ui->chkPidTidInHex->setChecked(settings.guiPidTidInHex);
+    ui->chkPidInHex->setChecked(settings.guiPidInHex);
     ui->chkSidebarWatchLabels->setChecked(settings.guiSidebarWatchLabels);
     ui->chkNoForegroundWindow->setChecked(settings.guiNoForegroundWindow);
     ui->chkSaveLoadTabOrder->setChecked(settings.guiLoadSaveTabOrder);
     ui->chkShowGraphRva->setChecked(settings.guiShowGraphRva);
-    ui->chkGraphZoomMode->setChecked(settings.guiGraphZoomMode);
     ui->chkShowExitConfirmation->setChecked(settings.guiShowExitConfirmation);
     ui->chkDisableAutoComplete->setChecked(settings.guiDisableAutoComplete);
-    ui->chkAutoFollowInStack->setChecked(settings.guiAutoFollowInStack);
+    ui->chkAsciiAddressDumpMode->setChecked(settings.guiAsciiAddressDumpMode);
 
     //Misc tab
     if(DbgFunctions()->GetJit)
@@ -318,7 +287,7 @@ void SettingsDialog::LoadSettings()
 
         ui->chkConfirmBeforeAtt->setCheckState(bool2check(settings.miscSetJITAuto));
 
-        if(!BridgeIsProcessElevated())
+        if(!DbgFunctions()->IsProcessElevated())
         {
             ui->chkSetJIT->setDisabled(true);
             ui->chkConfirmBeforeAtt->setDisabled(true);
@@ -348,36 +317,29 @@ void SettingsDialog::LoadSettings()
     GetSettingBool("Misc", "UseLocalHelpFile", &settings.miscUseLocalHelpFile);
     GetSettingBool("Misc", "QueryProcessCookie", &settings.miscQueryProcessCookie);
     GetSettingBool("Misc", "QueryWorkingSet", &settings.miscQueryWorkingSet);
-    GetSettingBool("Misc", "TransparentExceptionStepping", &settings.miscTransparentExceptionStepping);
     ui->chkUtf16LogRedirect->setChecked(settings.miscUtf16LogRedirect);
     ui->chkUseLocalHelpFile->setChecked(settings.miscUseLocalHelpFile);
     ui->chkQueryProcessCookie->setChecked(settings.miscQueryProcessCookie);
     ui->chkQueryWorkingSet->setChecked(settings.miscQueryWorkingSet);
-    ui->chkTransparentExceptionStepping->setChecked(settings.miscTransparentExceptionStepping);
 }
 
 void SettingsDialog::SaveSettings()
 {
     //Events tab
     BridgeSettingSetUint("Events", "SystemBreakpoint", settings.eventSystemBreakpoint);
-    BridgeSettingSetUint("Events", "NtTerminateProcess", settings.eventNtTerminateProcess);
     BridgeSettingSetUint("Events", "TlsCallbacks", settings.eventTlsCallbacks);
-    BridgeSettingSetUint("Events", "TlsCallbacksSystem", settings.eventTlsCallbacksSystem);
     BridgeSettingSetUint("Events", "EntryBreakpoint", settings.eventEntryBreakpoint);
     BridgeSettingSetUint("Events", "DllEntry", settings.eventDllEntry);
-    BridgeSettingSetUint("Events", "DllEntrySystem", settings.eventDllEntrySystem);
     BridgeSettingSetUint("Events", "ThreadEntry", settings.eventThreadEntry);
+    BridgeSettingSetUint("Events", "AttachBreakpoint", settings.eventAttachBreakpoint);
     BridgeSettingSetUint("Events", "DllLoad", settings.eventDllLoad);
     BridgeSettingSetUint("Events", "DllUnload", settings.eventDllUnload);
-    BridgeSettingSetUint("Events", "DllLoadSystem", settings.eventDllLoadSystem);
-    BridgeSettingSetUint("Events", "DllUnloadSystem", settings.eventDllUnloadSystem);
     BridgeSettingSetUint("Events", "ThreadStart", settings.eventThreadStart);
     BridgeSettingSetUint("Events", "ThreadEnd", settings.eventThreadEnd);
     BridgeSettingSetUint("Events", "DebugStrings", settings.eventDebugStrings);
 
     //Engine tab
     BridgeSettingSetUint("Engine", "CalculationType", settings.engineCalcType);
-    BridgeSettingSetUint("Engine", "DebugEngine", settings.engineType);
     BridgeSettingSetUint("Engine", "BreakpointType", settings.engineBreakpointType);
     BridgeSettingSetUint("Engine", "UndecorateSymbolNames", settings.engineUndecorateSymbolNames);
     BridgeSettingSetUint("Engine", "EnableDebugPrivilege", settings.engineEnableDebugPrivilege);
@@ -389,7 +351,6 @@ void SettingsDialog::SaveSettings()
     BridgeSettingSetUint("Engine", "NoScriptTimeout", settings.engineNoScriptTimeout);
     BridgeSettingSetUint("Engine", "IgnoreInconsistentBreakpoints", settings.engineIgnoreInconsistentBreakpoints);
     BridgeSettingSetUint("Engine", "MaxTraceCount", settings.engineMaxTraceCount);
-    BridgeSettingSetUint("Engine", "AnimateInterval", settings.engineAnimateInterval);
     BridgeSettingSetUint("Engine", "VerboseExceptionLogging", settings.engineVerboseExceptionLogging);
     BridgeSettingSetUint("Engine", "HardcoreThreadSwitchWarning", settings.engineHardcoreThreadSwitchWarning);
     BridgeSettingSetUint("Engine", "NoWow64SingleStepWorkaround", settings.engineNoWow64SingleStepWorkaround);
@@ -416,7 +377,6 @@ void SettingsDialog::SaveSettings()
     BridgeSettingSetUint("Disassembler", "PermanentHighlightingMode", settings.disasmPermanentHighlightingMode);
     BridgeSettingSetUint("Disassembler", "NoCurrentModuleText", settings.disasmNoCurrentModuleText);
     BridgeSettingSetUint("Disassembler", "0xPrefixValues", settings.disasm0xPrefixValues);
-    BridgeSettingSetUint("Disassembler", "NoBranchDisasmPreview", settings.disasmNoBranchDisasmPreview);
     BridgeSettingSetUint("Disassembler", "NoSourceLineAutoComments", settings.disasmNoSourceLineAutoComments);
     BridgeSettingSetUint("Disassembler", "MaxModuleSize", settings.disasmMaxModuleSize);
 
@@ -424,15 +384,14 @@ void SettingsDialog::SaveSettings()
     BridgeSettingSetUint("Gui", "FpuRegistersLittleEndian", settings.guiFpuRegistersLittleEndian);
     BridgeSettingSetUint("Gui", "SaveColumnOrder", settings.guiSaveColumnOrder);
     BridgeSettingSetUint("Gui", "NoCloseDialog", settings.guiNoCloseDialog);
-    BridgeSettingSetUint("Gui", "PidTidInHex", settings.guiPidTidInHex);
+    BridgeSettingSetUint("Gui", "PidInHex", settings.guiPidInHex);
     BridgeSettingSetUint("Gui", "SidebarWatchLabels", settings.guiSidebarWatchLabels);
     BridgeSettingSetUint("Gui", "NoForegroundWindow", settings.guiNoForegroundWindow);
     BridgeSettingSetUint("Gui", "LoadSaveTabOrder", settings.guiLoadSaveTabOrder);
     BridgeSettingSetUint("Gui", "ShowGraphRva", settings.guiShowGraphRva);
-    BridgeSettingSetUint("Gui", "GraphZoomMode", settings.guiGraphZoomMode);
     BridgeSettingSetUint("Gui", "ShowExitConfirmation", settings.guiShowExitConfirmation);
     BridgeSettingSetUint("Gui", "DisableAutoComplete", settings.guiDisableAutoComplete);
-    BridgeSettingSetUint("Gui", "AutoFollowInStack", settings.guiAutoFollowInStack);
+    BridgeSettingSetUint("Gui", "AsciiAddressDumpMode", settings.guiAsciiAddressDumpMode);
 
     //Misc tab
     if(DbgFunctions()->GetJit)
@@ -462,7 +421,6 @@ void SettingsDialog::SaveSettings()
     BridgeSettingSetUint("Misc", "UseLocalHelpFile", settings.miscUseLocalHelpFile);
     BridgeSettingSetUint("Misc", "QueryProcessCookie", settings.miscQueryProcessCookie);
     BridgeSettingSetUint("Misc", "QueryWorkingSet", settings.miscQueryWorkingSet);
-    BridgeSettingSetUint("Misc", "TransparentExceptionStepping", settings.miscTransparentExceptionStepping);
 
     BridgeSettingFlush();
     Config()->load();
@@ -476,10 +434,10 @@ void SettingsDialog::SaveSettings()
         emit Config()->disableAutoCompleteUpdated();
         bDisableAutoCompleteUpdated = false;
     }
-    if(bGuiOptionsUpdated)
+    if(bAsciiAddressDumpModeUpdated)
     {
-        emit Config()->guiOptionsUpdated();
-        bGuiOptionsUpdated = false;
+        emit Config()->asciiAddressDumpModeUpdated();
+        bAsciiAddressDumpModeUpdated = false;
     }
     DbgSettingsUpdated();
     GuiUpdateAllViews();
@@ -526,47 +484,58 @@ void SettingsDialog::on_btnSave_clicked()
 
 void SettingsDialog::on_chkSystemBreakpoint_stateChanged(int arg1)
 {
-    settings.eventSystemBreakpoint = arg1 != Qt::Unchecked;
-}
-
-void SettingsDialog::on_chkNtTerminateProcess_stateChanged(int arg1)
-{
-    settings.eventNtTerminateProcess = arg1 != Qt::Unchecked;
+    if(arg1 == Qt::Unchecked)
+        settings.eventSystemBreakpoint = false;
+    else
+        settings.eventSystemBreakpoint = true;
 }
 
 void SettingsDialog::on_chkTlsCallbacks_stateChanged(int arg1)
 {
-    settings.eventTlsCallbacks = arg1 != Qt::Unchecked;
-}
-
-void SettingsDialog::on_chkTlsCallbacksSystem_stateChanged(int arg1)
-{
-    settings.eventTlsCallbacksSystem = arg1 != Qt::Unchecked;
+    if(arg1 == Qt::Unchecked)
+        settings.eventTlsCallbacks = false;
+    else
+        settings.eventTlsCallbacks = true;
 }
 
 void SettingsDialog::on_chkEntryBreakpoint_stateChanged(int arg1)
 {
-    settings.eventEntryBreakpoint = arg1 != Qt::Unchecked;
+    if(arg1 == Qt::Unchecked)
+        settings.eventEntryBreakpoint = false;
+    else
+        settings.eventEntryBreakpoint = true;
 }
 
 void SettingsDialog::on_chkDllEntry_stateChanged(int arg1)
 {
-    settings.eventDllEntry = arg1 != Qt::Unchecked;
-}
-
-void SettingsDialog::on_chkDllEntrySystem_stateChanged(int arg1)
-{
-    settings.eventDllEntrySystem = arg1 != Qt::Unchecked;
+    if(arg1 == Qt::Unchecked)
+        settings.eventDllEntry = false;
+    else
+        settings.eventDllEntry = true;
 }
 
 void SettingsDialog::on_chkThreadEntry_stateChanged(int arg1)
 {
-    settings.eventThreadEntry = arg1 != Qt::Unchecked;
+    if(arg1 == Qt::Unchecked)
+        settings.eventThreadEntry = false;
+    else
+        settings.eventThreadEntry = true;
+}
+
+void SettingsDialog::on_chkAttachBreakpoint_stateChanged(int arg1)
+{
+    if(arg1 == Qt::Unchecked)
+        settings.eventAttachBreakpoint = false;
+    else
+        settings.eventAttachBreakpoint = true;
 }
 
 void SettingsDialog::on_chkConfirmBeforeAtt_stateChanged(int arg1)
 {
-    settings.miscSetJITAuto = arg1 != Qt::Unchecked;
+    if(arg1 == Qt::Unchecked)
+        settings.miscSetJITAuto = false;
+    else
+        settings.miscSetJITAuto = true;
 }
 
 void SettingsDialog::on_chkSetJIT_stateChanged(int arg1)
@@ -618,16 +587,6 @@ void SettingsDialog::on_chkDllUnload_stateChanged(int arg1)
     settings.eventDllUnload = arg1 != Qt::Unchecked;
 }
 
-void SettingsDialog::on_chkDllLoadSystem_stateChanged(int arg1)
-{
-    settings.eventDllLoadSystem = arg1 != Qt::Unchecked;
-}
-
-void SettingsDialog::on_chkDllUnloadSystem_stateChanged(int arg1)
-{
-    settings.eventDllUnloadSystem = arg1 != Qt::Unchecked;
-}
-
 void SettingsDialog::on_chkThreadStart_stateChanged(int arg1)
 {
     settings.eventThreadStart = arg1 != Qt::Unchecked;
@@ -651,16 +610,6 @@ void SettingsDialog::on_radioUnsigned_clicked()
 void SettingsDialog::on_radioSigned_clicked()
 {
     settings.engineCalcType = calc_signed;
-}
-
-void SettingsDialog::on_radioTitanEngine_clicked()
-{
-    settings.engineType = DebugEngineTitanEngine;
-}
-
-void SettingsDialog::on_radioGleeBug_clicked()
-{
-    settings.engineType = DebugEngineGleeBug;
 }
 
 void SettingsDialog::on_radioInt3Short_clicked()
@@ -836,20 +785,14 @@ void SettingsDialog::on_chkNoCloseDialog_toggled(bool checked)
     settings.guiNoCloseDialog = checked;
 }
 
-void SettingsDialog::on_chkAutoFollowInStack_toggled(bool checked)
-{
-    bGuiOptionsUpdated = true;
-    settings.guiAutoFollowInStack = checked;
-}
-
 void SettingsDialog::on_chkSkipInt3Stepping_toggled(bool checked)
 {
     settings.engineSkipInt3Stepping = checked;
 }
 
-void SettingsDialog::on_chkPidTidInHex_clicked(bool checked)
+void SettingsDialog::on_chkPidInHex_clicked(bool checked)
 {
-    settings.guiPidTidInHex = checked;
+    settings.guiPidInHex = checked;
 }
 
 void SettingsDialog::on_chkNoScriptTimeout_stateChanged(int arg1)
@@ -875,11 +818,6 @@ void SettingsDialog::on_chkNoForegroundWindow_toggled(bool checked)
 void SettingsDialog::on_spinMaxTraceCount_valueChanged(int arg1)
 {
     settings.engineMaxTraceCount = arg1;
-}
-
-void SettingsDialog::on_spinAnimateInterval_valueChanged(int arg1)
-{
-    settings.engineAnimateInterval = arg1;
 }
 
 void SettingsDialog::on_chkNoHighlightOperands_toggled(bool checked)
@@ -916,12 +854,6 @@ void SettingsDialog::on_chk0xPrefixValues_toggled(bool checked)
     settings.disasm0xPrefixValues = checked;
 }
 
-void SettingsDialog::on_chkNoBranchDisasmPreview_toggled(bool checked)
-{
-    bGuiOptionsUpdated = true;
-    settings.disasmNoBranchDisasmPreview = checked;
-}
-
 void SettingsDialog::on_chkNoSourceLinesAutoComments_toggled(bool checked)
 {
     settings.disasmNoSourceLineAutoComments = checked;
@@ -938,12 +870,6 @@ void SettingsDialog::on_chkShowGraphRva_toggled(bool checked)
     settings.guiShowGraphRva = checked;
 }
 
-void SettingsDialog::on_chkGraphZoomMode_toggled(bool checked)
-{
-    bTokenizerConfigUpdated = true;
-    settings.guiGraphZoomMode = checked;
-}
-
 void SettingsDialog::on_chkShowExitConfirmation_toggled(bool checked)
 {
     settings.guiShowExitConfirmation = checked;
@@ -953,6 +879,12 @@ void SettingsDialog::on_chkDisableAutoComplete_toggled(bool checked)
 {
     settings.guiDisableAutoComplete = checked;
     bDisableAutoCompleteUpdated = true;
+}
+
+void SettingsDialog::on_chkAsciiAddressDumpMode_toggled(bool checked)
+{
+    settings.guiAsciiAddressDumpMode = checked;
+    bAsciiAddressDumpModeUpdated = true;
 }
 
 void SettingsDialog::on_chkUseLocalHelpFile_toggled(bool checked)
@@ -968,9 +900,4 @@ void SettingsDialog::on_chkQueryProcessCookie_toggled(bool checked)
 void SettingsDialog::on_chkQueryWorkingSet_toggled(bool checked)
 {
     settings.miscQueryWorkingSet = checked;
-}
-
-void SettingsDialog::on_chkTransparentExceptionStepping_toggled(bool checked)
-{
-    settings.miscTransparentExceptionStepping = checked;
 }

@@ -5,7 +5,10 @@
 class XrefsAnalysis : public Analysis
 {
 public:
-    XrefsAnalysis(duint base, duint size);
+    XrefsAnalysis(duint base, duint size)
+        : Analysis(base, size)
+    {
+    }
 
     void Analyse() override;
     void SetMarkers() override;
@@ -18,12 +21,4 @@ private:
     };
 
     std::vector<XREF> mXrefs;
-
-    duint modbase = 0;
-    duint modsize = 0;
-
-    bool inModRange(duint addr) const
-    {
-        return modbase ? (addr >= modbase && addr < modbase + modsize) : inRange(addr);
-    }
 };

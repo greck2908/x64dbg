@@ -2,7 +2,6 @@
 #define _PATTERNFIND_H
 
 #include <vector>
-#include <string>
 
 struct PatternByte
 {

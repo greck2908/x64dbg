@@ -48,14 +48,10 @@ public:
     inline const String & getExpr()
     {
         return expr.GetExpression();
-    };
+    }
     inline const bool HaveCurrentValue()
     {
         return haveCurrValue;
-    };
-    inline void setType(WATCHVARTYPE type)
-    {
-        varType = type;
     };
 };
 
@@ -73,7 +69,6 @@ WATCHDOGMODE WatchGetWatchdogMode(unsigned int id);
 WATCHDOGMODE WatchGetWatchdogEnabled(unsigned int id);
 duint WatchGetUnsignedValue(unsigned int id);
 WATCHVARTYPE WatchGetType(unsigned int id);
-void WatchSetType(unsigned int id, WATCHVARTYPE type);
 std::vector<WATCHINFO> WatchGetList();
 
 void WatchCacheSave(JSON root); // Save watch data to database

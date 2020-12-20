@@ -46,14 +46,6 @@ void HistoryLineEdit::addLineToHistory(QString parLine)
     mCmdIndex = -1;
 }
 
-QString HistoryLineEdit::getLineFromHistory()
-{
-    if(mCmdHistory.empty())
-        return "";
-    else
-        return mCmdHistory.first();
-}
-
 QString HistoryLineEdit::addHistoryClear()
 {
     auto str = text();

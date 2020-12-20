@@ -3,7 +3,6 @@
 
 #include "Zydis/Zydis.h"
 #include <functional>
-#include <string>
 
 #define MAX_DISASM_BUFFER 16
 
@@ -13,7 +12,7 @@ public:
     static void GlobalInitialize();
     static void GlobalFinalize();
     Zydis();
-    Zydis(const Zydis & zydis) = delete;
+    Zydis(const Zydis & capstone) = delete;
     ~Zydis();
     bool Disassemble(size_t addr, const unsigned char data[MAX_DISASM_BUFFER]);
     bool Disassemble(size_t addr, const unsigned char* data, int size);
@@ -90,16 +89,6 @@ public:
     };
 
     bool IsBranchType(std::underlying_type_t<BranchType> bt) const;
-
-    enum VectorElementType : uint8_t
-    {
-        VETDefault,
-        VETFloat32,
-        VETFloat64,
-        VETInt32,
-        VETInt64
-    };
-    VectorElementType getVectorElementType(int opindex) const;
 
     // Shortcuts.
     bool IsRet() const { return IsBranchType(BTRet); }

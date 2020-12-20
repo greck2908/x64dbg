@@ -5,10 +5,37 @@
 
 #include "pdbdiafile.h"
 #include "symbolsourcebase.h"
+#include "sortedlru.h"
 
 #include <thread>
 #include <atomic>
 #include <mutex>
+
+class SpinLock
+{
+private:
+    std::atomic_flag _locked;
+
+public:
+    SpinLock() { _locked.clear(); }
+    void lock()
+    {
+        while(_locked.test_and_set(std::memory_order_acquire)) { ; }
+    }
+    void unlock()
+    {
+        _locked.clear(std::memory_order_release);
+    }
+};
+
+class ScopedSpinLock
+{
+private:
+    SpinLock & _lock;
+public:
+    ScopedSpinLock(SpinLock & lock) : _lock(lock) { _lock.lock(); }
+    ~ScopedSpinLock() { _lock.unlock(); }
+};
 
 class SymbolSourceDIA : public SymbolSourceBase
 {
@@ -16,7 +43,7 @@ class SymbolSourceDIA : public SymbolSourceBase
     {
         uint32 rva;
         uint32 lineNumber;
-        uint32 sourceFileIndex;
+        uint32 sourceFileIdx;
     };
 
     struct ScopedDecrement
@@ -24,8 +51,6 @@ class SymbolSourceDIA : public SymbolSourceBase
     private:
         std::atomic<duint> & _counter;
     public:
-        ScopedDecrement(const ScopedDecrement &) = delete;
-        ScopedDecrement & operator=(const ScopedDecrement &) = delete;
         ScopedDecrement(std::atomic<duint> & counter) : _counter(counter) {}
         ~ScopedDecrement() { _counter--; }
     };
@@ -43,27 +68,35 @@ private: //symbols
             return addr < b.addr;
         }
     };
-
     std::vector<AddrIndex> _symAddrMap; //rva -> data index (sorted on rva)
-    std::vector<NameIndex> _symNameMap; //name -> data index (sorted on name)
 
-private: //line info
-    std::vector<CachedLineInfo> _linesData;
-    std::vector<AddrIndex> _lineAddrMap; //addr -> line
-    std::vector<String> _sourceFiles; // uniqueId + name
-
-    struct LineIndex
+    struct NameIndex
     {
-        uint32_t line;
-        uint32_t index;
+        const char* name;
+        size_t index;
 
-        bool operator<(const LineIndex & b) const
+        bool operator<(const NameIndex & b) const
         {
-            return line < b.line;
+            return cmp(*this, b, false) < 0;
+        }
+
+        static int cmp(const NameIndex & a, const NameIndex & b, bool caseSensitive)
+        {
+            return (caseSensitive ? strcmp : hackicmp)(a.name, b.name);
         }
     };
+    std::vector<NameIndex> _symNameMap; //name -> data index (sorted on name)
+    //Symbol addresses to index in _symNames (TODO: refactor to std::vector)
+    std::map<duint, size_t> _symAddrs;
+    //std::map<duint, SymbolInfo> _sym;
 
-    std::vector<std::vector<LineIndex>> _sourceLines; //uses index in _sourceFiles
+private: //line info
+    //TODO: make this source file stuff smarter
+    std::vector<CachedLineInfo> _linesData;
+    std::map<duint, size_t> _lines; //addr -> line
+    std::vector<String> _sourceFiles; // uniqueId + name
+    std::map<DWORD, uint32_t> _sourceIdMap; //uniqueId -> index in _sourceFiles
+    std::vector<std::map<int, size_t>> _sourceLines; //uses index in _sourceFiles
 
 private: //general
     HANDLE _symbolsThread = nullptr;
@@ -73,11 +106,11 @@ private: //general
 
     bool _isOpen;
     std::string _path;
-    std::string _modname;
     duint _imageBase;
     duint _imageSize;
-    std::atomic<bool> _symbolsLoaded = false;
-    std::atomic<bool> _linesLoaded = false;
+    SpinLock _lockSymbols;
+    bool _symbolsLoaded = false;
+    SpinLock _lockLines;
 
 private:
     static int hackicmp(const char* s1, const char* s2)
@@ -110,8 +143,6 @@ public:
 
     virtual bool cancelLoading() override;
 
-    virtual void waitUntilLoaded() override;
-
     virtual bool findSymbolExact(duint rva, SymbolInfo & symInfo) override;
 
     virtual bool findSymbolExactOrLower(duint rva, SymbolInfo & symInfo) override;
@@ -126,12 +157,11 @@ public:
 
     virtual bool findSymbolsByPrefix(const std::string & prefix, const std::function<bool(const SymbolInfo &)> & cbSymbol, bool caseSensitive) override;
 
-    virtual std::string loadedSymbolPath() const override;
-
 public:
-    bool loadPDB(const std::string & path, const std::string & modname, duint imageBase, duint imageSize, DiaValidationData_t* validationData);
+    bool loadPDB(const std::string & path, duint imageBase, duint imageSize, DiaValidationData_t* validationData);
 
 private:
+    void loadPDBAsync();
     bool loadSymbolsAsync();
     bool loadSourceLinesAsync();
     uint32_t findSourceFile(const std::string & fileName) const;

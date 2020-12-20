@@ -78,6 +78,9 @@ void WordEditDialog::expressionChanged(bool validExpression, bool validPointer, 
     Q_UNUSED(validPointer);
     if(validExpression)
     {
+        ui->expressionLineEdit->setStyleSheet("");
+        ui->signedLineEdit->setStyleSheet("");
+        ui->unsignedLineEdit->setStyleSheet("");
         ui->btnOk->setEnabled(true);
 
         //hex

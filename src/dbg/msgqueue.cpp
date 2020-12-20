@@ -3,7 +3,12 @@
 // Allocate a message stack
 MESSAGE_STACK* MsgAllocStack()
 {
-    return new MESSAGE_STACK();
+    auto stack = new MESSAGE_STACK;
+
+    stack->WaitingCalls = 0;
+    stack->Destroy = false;
+
+    return stack;
 }
 
 // Free a message stack

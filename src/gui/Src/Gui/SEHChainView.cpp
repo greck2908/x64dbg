@@ -87,11 +87,11 @@ void SEHChainView::doubleClickedSlot()
 void SEHChainView::followAddress()
 {
     QString addrText = getCellContent(getInitialSelection(), 0);
-    DbgCmdExecDirect(QString("sdump " + addrText));
+    DbgCmdExecDirect(QString("sdump " + addrText).toUtf8().constData());
 }
 
 void SEHChainView::followHandler()
 {
     QString addrText = getCellContent(getInitialSelection(), 1);
-    DbgCmdExecDirect(QString("disasm " + addrText));
+    DbgCmdExecDirect(QString("disasm " + addrText).toUtf8().constData());
 }

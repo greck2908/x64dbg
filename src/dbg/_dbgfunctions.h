@@ -129,13 +129,6 @@ typedef struct
     duint value;
 } CONSTANTINFO;
 
-typedef enum
-{
-    MODSYMUNLOADED = 0,
-    MODSYMLOADING,
-    MODSYMLOADED
-} MODULESYMBOLSTATUS;
-
 typedef bool (*ASSEMBLEATEX)(duint addr, const char* instruction, char* error, bool fillnop);
 typedef bool (*SECTIONFROMADDR)(duint addr, char* section);
 typedef bool (*MODNAMEFROMADDR)(duint addr, char* modname, bool extension);
@@ -184,8 +177,8 @@ typedef bool (*ENUMHANDLES)(ListOf(HANDLEINFO) handles);
 typedef bool (*GETHANDLENAME)(duint handle, char* name, size_t nameSize, char* typeName, size_t typeNameSize);
 typedef bool (*ENUMTCPCONNECTIONS)(ListOf(TCPCONNECTIONINFO) connections);
 typedef duint(*GETDBGEVENTS)();
-typedef MODULEPARTY(*MODGETPARTY)(duint base);
-typedef void (*MODSETPARTY)(duint base, MODULEPARTY party);
+typedef int (*MODGETPARTY)(duint base);
+typedef void (*MODSETPARTY)(duint base, int party);
 typedef bool(*WATCHISWATCHDOGTRIGGERED)(unsigned int id);
 typedef bool(*MEMISCODEPAGE)(duint addr, bool refresh);
 typedef bool(*ANIMATECOMMAND)(const char* command);
@@ -206,7 +199,6 @@ typedef duint(*DBGETHASH)();
 typedef int(*SYMAUTOCOMPLETE)(const char* Search, char** Buffer, int MaxSymbols);
 typedef void(*REFRESHMODULELIST)();
 typedef duint(*GETADDRFROMLINEEX)(duint mod, const char* szSourceFile, int line);
-typedef MODULESYMBOLSTATUS(*MODSYMBOLSTATUS)(duint mod);
 
 //The list of all the DbgFunctions() return value.
 //WARNING: This list is append only. Do not insert things in the middle or plugins would break.
@@ -284,7 +276,6 @@ typedef struct DBGFUNCTIONS_
     SYMAUTOCOMPLETE SymAutoComplete;
     REFRESHMODULELIST RefreshModuleList;
     GETADDRFROMLINEEX GetAddrFromLineEx;
-    MODSYMBOLSTATUS ModSymbolStatus;
 } DBGFUNCTIONS;
 
 #ifdef BUILD_DBG

@@ -2,10 +2,8 @@
 #include <QHBoxLayout>
 #include <QSplitter>
 #include <QLabel>
-#include <QTimer>
 #include "SearchListView.h"
 #include "FlickerThread.h"
-#include "MethodInvoker.h"
 
 SearchListView::SearchListView(QWidget* parent, AbstractSearchList* abstractSearchList, bool enableRegex, bool enableLock)
     : QWidget(parent), mAbstractSearchList(abstractSearchList)
@@ -33,7 +31,7 @@ SearchListView::SearchListView(QWidget* parent, AbstractSearchList* abstractSear
             listLayout->addWidget(abstractSearchList->searchList());
 
             // Add list placeholder
-            QWidget* listPlaceholder = new QWidget(this);
+            QWidget* listPlaceholder = new QWidget();
             listPlaceholder->setLayout(listLayout);
 
             barSplitter->addWidget(listPlaceholder);
@@ -68,7 +66,7 @@ SearchListView::SearchListView(QWidget* parent, AbstractSearchList* abstractSear
             horzLayout->addWidget(mRegexCheckbox);
 
             // Add searchbar placeholder
-            QWidget* horzPlaceholder = new QWidget(this);
+            QWidget* horzPlaceholder = new QWidget();
             horzPlaceholder->setLayout(horzLayout);
 
             barSplitter->addWidget(horzPlaceholder);
@@ -102,17 +100,12 @@ SearchListView::SearchListView(QWidget* parent, AbstractSearchList* abstractSear
     mSearchAction = new QAction(DIcon("find.png"), tr("Search..."), this);
     connect(mSearchAction, SIGNAL(triggered()), this, SLOT(searchSlot()));
 
-    // https://wiki.qt.io/Delay_action_to_wait_for_user_interaction
-    mTypingTimer = new QTimer(this);
-    mTypingTimer->setSingleShot(true);
-    connect(mTypingTimer, SIGNAL(timeout()), this, SLOT(filterEntries()));
-
     // Slots
     connect(abstractSearchList->list(), SIGNAL(contextMenuSignal(QPoint)), this, SLOT(listContextMenu(QPoint)));
     connect(abstractSearchList->list(), SIGNAL(doubleClickedSignal()), this, SLOT(doubleClickedSlot()));
     connect(abstractSearchList->searchList(), SIGNAL(contextMenuSignal(QPoint)), this, SLOT(listContextMenu(QPoint)));
     connect(abstractSearchList->searchList(), SIGNAL(doubleClickedSignal()), this, SLOT(doubleClickedSlot()));
-    connect(mSearchBox, SIGNAL(textEdited(QString)), this, SLOT(searchTextEdited(QString)));
+    connect(mSearchBox, SIGNAL(textChanged(QString)), this, SLOT(searchTextChanged(QString)));
     connect(mRegexCheckbox, SIGNAL(stateChanged(int)), this, SLOT(on_checkBoxRegex_stateChanged(int)));
     connect(mLockCheckbox, SIGNAL(toggled(bool)), mSearchBox, SLOT(setDisabled(bool)));
 
@@ -152,7 +145,7 @@ bool SearchListView::findTextInList(AbstractStdTable* list, QString text, int ro
     return false;
 }
 
-void SearchListView::filterEntries()
+void SearchListView::searchTextChanged(const QString & text)
 {
     mAbstractSearchList->lock();
 
@@ -165,14 +158,10 @@ void SearchListView::filterEntries()
     // get the correct previous list instance
     auto mPrevList = mAbstractSearchList->list()->isVisible() ? mAbstractSearchList->list() : mAbstractSearchList->searchList();
 
-    if(mFilterText.length())
+    if(text.length())
     {
-        MethodInvoker::invokeMethod([this]()
-        {
-            mAbstractSearchList->list()->hide();
-            mAbstractSearchList->searchList()->show();
-        });
-
+        mAbstractSearchList->list()->hide();
+        mAbstractSearchList->searchList()->show();
         mCurList = mAbstractSearchList->searchList();
 
         // filter the list
@@ -186,16 +175,12 @@ void SearchListView::filterEntries()
             filterType = AbstractSearchList::FilterRegexCaseSensitive;
             break;
         }
-        mAbstractSearchList->filter(mFilterText, filterType, mSearchStartCol);
+        mAbstractSearchList->filter(text, filterType, mSearchStartCol);
     }
     else
     {
-        MethodInvoker::invokeMethod([this]()
-        {
-            mAbstractSearchList->searchList()->hide();
-            mAbstractSearchList->list()->show();
-        });
-
+        mAbstractSearchList->searchList()->hide();
+        mAbstractSearchList->list()->show();
         mCurList = mAbstractSearchList->list();
     }
 
@@ -231,7 +216,7 @@ void SearchListView::filterEntries()
     // Do not highlight with regex
     // TODO: fully respect highlighting mode
     if(mRegexCheckbox->checkState() == Qt::Unchecked)
-        mAbstractSearchList->searchList()->setHighlightText(mFilterText, mSearchStartCol);
+        mAbstractSearchList->searchList()->setHighlightText(text);
     else
         mAbstractSearchList->searchList()->setHighlightText(QString());
 
@@ -253,44 +238,9 @@ void SearchListView::filterEntries()
     mAbstractSearchList->unlock();
 }
 
-void SearchListView::searchTextEdited(const QString & text)
-{
-    mFilterText = text;
-    mAbstractSearchList->lock();
-    mTypingTimer->setInterval([](dsint rowCount)
-    {
-        // These numbers are kind of arbitrarily chosen, but seem to work
-        if(rowCount <= 10000)
-            return 0;
-        else if(rowCount <= 600000)
-            return 100;
-        else
-            return 350;
-    }(mAbstractSearchList->list()->getRowCount()));
-    mAbstractSearchList->unlock();
-    mTypingTimer->start(); // This will fire filterEntries after interval ms.
-    // If the user types something before it fires, the timer restarts counting
-}
-
 void SearchListView::refreshSearchList()
 {
-    filterEntries();
-}
-
-void SearchListView::clearFilter()
-{
-    bool isFilterAlreadyEmpty = mFilterText.isEmpty();
-    mFilterText.clear();
-
-    if(!isFilterAlreadyEmpty)
-    {
-        MethodInvoker::invokeMethod([this]()
-        {
-            mSearchBox->clear();
-        });
-
-        filterEntries();
-    }
+    searchTextChanged(mSearchBox->text());
 }
 
 void SearchListView::listContextMenu(const QPoint & pos)
@@ -393,6 +343,5 @@ void SearchListView::searchSlot()
 {
     FlickerThread* thread = new FlickerThread(mSearchBox, this);
     connect(thread, SIGNAL(setStyleSheet(QString)), mSearchBox, SLOT(setStyleSheet(QString)));
-    connect(thread, SIGNAL(finished()), thread, SLOT(deleteLater()));
     thread->start();
 }

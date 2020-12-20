@@ -33,7 +33,7 @@ static bool cbDebugConditionalTrace(void(*callback)(), bool stepOver, int argc, 
     HistoryClear();
 
     if(stepOver)
-        StepOverWrapper((void*)callback);
+        StepOver((void*)callback);
     else
         StepIntoWow64((void*)callback);
     return cbDebugRunInternal(1, argv);

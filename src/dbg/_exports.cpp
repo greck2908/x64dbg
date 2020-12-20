@@ -39,7 +39,7 @@
 
 static bool bOnlyCipAutoComments = false;
 static bool bNoSourceLineAutoComments = false;
-static TITAN_ENGINE_CONTEXT_t lastContext;
+static TITAN_ENGINE_CONTEXT_t titcontext;
 
 extern "C" DLL_EXPORT duint _dbg_memfindbaseaddr(duint addr, duint* size)
 {
@@ -352,31 +352,15 @@ extern "C" DLL_EXPORT bool _dbg_addrinfoget(duint addr, SEGMENTREG segment, BRID
             char string_text[MAX_STRING_SIZE] = "";
 
             Zydis cp;
-            auto getregs = !bOnlyCipAutoComments || addr == lastContext.cip;
+            auto getregs = !bOnlyCipAutoComments || addr == titcontext.cip;
             disasmget(cp, addr, &instr, getregs);
-            // Some nop variants have 'operands' that should be ignored
-            if(cp.Success() && !cp.IsNop())
+            if(!cp.IsNop())
             {
                 //Ignore register values when not on CIP and OnlyCipAutoComments is enabled: https://github.com/x64dbg/x64dbg/issues/1383
                 if(!getregs)
                 {
                     for(int i = 0; i < instr.argcount; i++)
                         instr.arg[i].value = instr.arg[i].constant;
-                }
-
-                if(addr == lastContext.cip && (cp.GetId() == ZYDIS_MNEMONIC_SYSCALL || (cp.GetId() == ZYDIS_MNEMONIC_INT && cp[0].imm.value.u == 0x2e)))
-                {
-                    auto syscallName = SyscallToName(lastContext.cax);
-                    if(!syscallName.empty())
-                    {
-                        if(!comment.empty())
-                        {
-                            comment.push_back(',');
-                            comment.push_back(' ');
-                        }
-                        comment.append(syscallName);
-                        retval = true;
-                    }
                 }
 
                 for(int i = 0; i < instr.argcount; i++)
@@ -668,13 +652,8 @@ extern "C" DLL_EXPORT bool _dbg_getregdump(REGDUMP* regdump)
         return true;
     }
 
-    TITAN_ENGINE_CONTEXT_t titcontext;
     if(!GetFullContextDataEx(hActiveThread, &titcontext))
         return false;
-
-    // NOTE: this is not thread-safe, but that's fine because lastContext is only used for GUI-related operations
-    memcpy(&lastContext, &titcontext, sizeof(titcontext));
-
     TranslateTitanContextToRegContext(&titcontext, &regdump->regcontext);
 
     duint cflags = regdump->regcontext.eflags;
@@ -785,7 +764,7 @@ extern "C" DLL_EXPORT duint _dbg_getbranchdestination(duint addr)
     Zydis cp;
     if(!cp.Disassemble(addr, data))
         return 0;
-    if(cp.IsBranchType(Zydis::BTJmp | Zydis::BTCall | Zydis::BTLoop | Zydis::BTXbegin))
+    if(cp.IsBranchType(Zydis::BTJmp | Zydis::BTCall | Zydis::BTLoop))
     {
         auto opValue = cp.ResolveOpValue(0, [](ZydisRegister reg) -> size_t
         {
@@ -793,58 +772,58 @@ extern "C" DLL_EXPORT duint _dbg_getbranchdestination(duint addr)
             {
 #ifndef _WIN64 //x32
             case ZYDIS_REGISTER_EAX:
-                return lastContext.cax;
+                return titcontext.cax;
             case ZYDIS_REGISTER_EBX:
-                return lastContext.cbx;
+                return titcontext.cbx;
             case ZYDIS_REGISTER_ECX:
-                return lastContext.ccx;
+                return titcontext.ccx;
             case ZYDIS_REGISTER_EDX:
-                return lastContext.cdx;
+                return titcontext.cdx;
             case ZYDIS_REGISTER_EBP:
-                return lastContext.cbp;
+                return titcontext.cbp;
             case ZYDIS_REGISTER_ESP:
-                return lastContext.csp;
+                return titcontext.csp;
             case ZYDIS_REGISTER_ESI:
-                return lastContext.csi;
+                return titcontext.csi;
             case ZYDIS_REGISTER_EDI:
-                return lastContext.cdi;
+                return titcontext.cdi;
             case ZYDIS_REGISTER_EIP:
-                return lastContext.cip;
+                return titcontext.cip;
 #else //x64
             case ZYDIS_REGISTER_RAX:
-                return lastContext.cax;
+                return titcontext.cax;
             case ZYDIS_REGISTER_RBX:
-                return lastContext.cbx;
+                return titcontext.cbx;
             case ZYDIS_REGISTER_RCX:
-                return lastContext.ccx;
+                return titcontext.ccx;
             case ZYDIS_REGISTER_RDX:
-                return lastContext.cdx;
+                return titcontext.cdx;
             case ZYDIS_REGISTER_RBP:
-                return lastContext.cbp;
+                return titcontext.cbp;
             case ZYDIS_REGISTER_RSP:
-                return lastContext.csp;
+                return titcontext.csp;
             case ZYDIS_REGISTER_RSI:
-                return lastContext.csi;
+                return titcontext.csi;
             case ZYDIS_REGISTER_RDI:
-                return lastContext.cdi;
+                return titcontext.cdi;
             case ZYDIS_REGISTER_RIP:
-                return lastContext.cip;
+                return titcontext.cip;
             case ZYDIS_REGISTER_R8:
-                return lastContext.r8;
+                return titcontext.r8;
             case ZYDIS_REGISTER_R9:
-                return lastContext.r9;
+                return titcontext.r9;
             case ZYDIS_REGISTER_R10:
-                return lastContext.r10;
+                return titcontext.r10;
             case ZYDIS_REGISTER_R11:
-                return lastContext.r11;
+                return titcontext.r11;
             case ZYDIS_REGISTER_R12:
-                return lastContext.r12;
+                return titcontext.r12;
             case ZYDIS_REGISTER_R13:
-                return lastContext.r13;
+                return titcontext.r13;
             case ZYDIS_REGISTER_R14:
-                return lastContext.r14;
+                return titcontext.r14;
             case ZYDIS_REGISTER_R15:
-                return lastContext.r15;
+                return titcontext.r15;
 #endif //_WIN64
             default:
                 return 0;
@@ -852,7 +831,11 @@ extern "C" DLL_EXPORT duint _dbg_getbranchdestination(duint addr)
         });
         if(cp.OpCount() && cp[0].type == ZYDIS_OPERAND_TYPE_MEMORY)
         {
-            auto const tebseg = ArchValue(ZYDIS_REGISTER_FS, ZYDIS_REGISTER_GS);
+#ifdef _WIN64
+            auto const tebseg = ZYDIS_REGISTER_GS;
+#else
+            auto const tebseg = ZYDIS_REGISTER_FS;
+#endif //_WIN64
             if(cp[0].mem.segment == tebseg)
                 opValue += duint(GetTEBLocation(hActiveThread));
             if(MemRead(opValue, &opValue, sizeof(opValue)))
@@ -863,7 +846,7 @@ extern "C" DLL_EXPORT duint _dbg_getbranchdestination(duint addr)
     }
     if(cp.IsRet())
     {
-        auto csp = lastContext.csp;
+        auto csp = titcontext.csp;
         duint dest = 0;
         if(MemRead(csp, &dest, sizeof(dest)))
             return dest;
@@ -892,7 +875,6 @@ extern "C" DLL_EXPORT duint _dbg_sendmessage(DBGMSG type, void* param1, void* pa
         case DBG_WIN_EVENT_GLOBAL:
         case DBG_RELEASE_ENCODE_TYPE_BUFFER:
         case DBG_GET_TIME_WASTED_COUNTER:
-        case DBG_GET_DEBUG_ENGINE:
             break;
         //the rest is unsafe -> throw an exception when people try to call them
         default:
@@ -1491,7 +1473,7 @@ extern "C" DLL_EXPORT duint _dbg_sendmessage(DBGMSG type, void* param1, void* pa
     case DBG_MENU_PREPARE:
     {
         PLUG_CB_MENUPREPARE info;
-        info.hMenu = GUIMENUTYPE(duint(param1));
+        info.hMenu = int(param1);
         plugincbcall(CB_MENUPREPARE, &info);
     }
     break;
@@ -1500,21 +1482,6 @@ extern "C" DLL_EXPORT duint _dbg_sendmessage(DBGMSG type, void* param1, void* pa
     {
         auto symbolptr = (const SYMBOLPTR*)param1;
         ((const SymbolInfoGui*)symbolptr->symbol)->convertToGuiSymbol(symbolptr->modbase, (SYMBOLINFO*)param2);
-    }
-    break;
-
-    case DBG_GET_DEBUG_ENGINE:
-    {
-        static auto debugEngine = []
-        {
-            duint setting = DebugEngineTitanEngine;
-            if(!BridgeSettingGetUint("Engine", "DebugEngine", &setting))
-            {
-                BridgeSettingSetUint("Engine", "DebugEngine", setting);
-            }
-            return (DEBUG_ENGINE)setting;
-        }();
-        return debugEngine;
     }
     break;
     }

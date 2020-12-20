@@ -26,11 +26,6 @@ public slots:
     void watchdogUnchangedSlot();
     void watchdogIsTrueSlot();
     void watchdogIsFalseSlot();
-    void setTypeUintSlot();
-    void setTypeIntSlot();
-    void setTypeFloatSlot();
-    void setTypeAsciiSlot();
-    void setTypeUnicodeSlot();
 
 protected:
     void setupContextMenu();
@@ -40,17 +35,6 @@ protected:
     MenuBuilder* mMenu;
     QPen mWatchTriggeredColor;
     QBrush mWatchTriggeredBackgroundColor;
-
-private:
-    enum
-    {
-        ColName = 0,
-        ColExpr,
-        ColValue,
-        ColType,
-        ColWatchdog,
-        ColId
-    };
 };
 
 #endif // WATCHVIEW_H

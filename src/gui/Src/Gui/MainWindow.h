@@ -29,10 +29,11 @@ class MainWindowCloseThread;
 class TimeWastedCounter;
 class NotesManager;
 class SettingsDialog;
+class DisassemblerGraphView;
 class SimpleTraceDialog;
 class MRUList;
 class UpdateChecker;
-class TraceWidget;
+class TraceBrowser;
 
 namespace Ui
 {
@@ -54,8 +55,6 @@ public:
     void loadTabDefaultOrder();
     void loadTabSavedOrder();
     void clearTabWidget();
-
-    static void loadSelectedStyle(bool reloadStyleCss = false);
 
 public slots:
     void saveWindowSettings();
@@ -83,11 +82,11 @@ public slots:
     void execTRWord();
     void execTRNone();
     void displayCpuWidget();
-    void displayCpuWidgetShowCpu();
     void displaySymbolWidget();
     void displaySourceViewWidget();
     void displayReferencesWidget();
     void displayThreadsWidget();
+    void displaySnowmanWidget();
     void displayVariables();
     void displayGraphWidget();
     void displayRunTrace();
@@ -103,7 +102,7 @@ public slots:
     void setLastException(unsigned int exceptionCode);
     void findStrings();
     void findModularCalls();
-    void addMenuToList(QWidget* parent, QMenu* menu, GUIMENUTYPE hMenu, int hParentMenu = -1);
+    void addMenuToList(QWidget* parent, QMenu* menu, int hMenu, int hParentMenu = -1);
     void addMenu(int hMenu, QString title);
     void addMenuEntry(int hMenu, QString title);
     void addSeparator(int hMenu);
@@ -144,7 +143,7 @@ public slots:
     void addQWidgetTab(QWidget* qWidget);
     void showQWidgetTab(QWidget* qWidget);
     void closeQWidgetTab(QWidget* qWidget);
-    void executeOnGuiThread(void* cbGuiThread, void* userdata);
+    void executeOnGuiThread(void* cbGuiThread);
     void tabMovedSlot(int from, int to);
     void chkSaveloadTabSavedOrderStateChangedSlot(bool state);
     void dbgStateChangedSlot(DBGSTATE state);
@@ -158,7 +157,6 @@ public slots:
     void customizeMenu();
     void addFavouriteItem(int type, const QString & name, const QString & description);
     void setFavouriteItemShortcut(int type, const QString & name, const QString & shortcut);
-    void themeTriggeredSlot();
 
 private:
     Ui::MainWindow* ui;
@@ -178,14 +176,15 @@ private:
     ThreadView* mThreadView;
     PatchDialog* mPatchDialog;
     CalculatorDialog* mCalculatorDialog;
+    QWidget* mSnowmanView;
     HandlesView* mHandlesView;
     NotesManager* mNotesManager;
-    TraceWidget* mTraceWidget;
+    DisassemblerGraphView* mGraphView;
+    TraceBrowser* mTraceBrowser;
     SimpleTraceDialog* mSimpleTraceDialog;
     UpdateChecker* mUpdateChecker;
     DebugStatusLabel* mStatusLabel;
     LogStatusLabel* mLastLogLabel;
-    QToolBar* mFavouriteToolbar;
 
     TimeWastedCounter* mTimeWastedCounter;
 
@@ -198,7 +197,6 @@ private:
 
     void updateMRUMenu();
     void setupLanguagesMenu();
-    void setupThemesMenu();
     void onMenuCustomized();
     void setupMenuCustomization();
     QAction* makeCommandAction(QAction* action, const QString & command);
@@ -247,7 +245,6 @@ private:
     QString nestedMenuDescription(const MenuInfo* menu);
     QString nestedMenuEntryDescription(const MenuEntryInfo & entry);
     void clearMenuHelper(int hMenu);
-    void clearMenuImpl(int hMenu, bool erase);
 
     bool bCanClose;
     MainWindowCloseThread* mCloseThread;
@@ -266,16 +263,17 @@ private:
     };
 
     QList<WidgetInfo> mWidgetList;
-    QList<WidgetInfo> mPluginWidgetList;
 
 protected:
     void dragEnterEvent(QDragEnterEvent* pEvent);
     void dropEvent(QDropEvent* pEvent);
     bool event(QEvent* event);
 
+public:
+    static QString windowTitle;
+
 private slots:
     void setupLanguagesMenu2();
-    void updateStyle();
 
     void on_actionFaq_triggered();
     void on_actionReloadStylesheet_triggered();
@@ -285,7 +283,6 @@ private slots:
     void on_actionRestartAdmin_triggered();
     void on_actionPlugins_triggered();
     void on_actionCheckUpdates_triggered();
-    void on_actionDefaultTheme_triggered();
 };
 
 #endif // MAINWINDOW_H

@@ -60,7 +60,7 @@ static NTSTATUS ImageNtHeaders(duint base, duint size, PIMAGE_NT_HEADERS* outHea
 }
 
 // Use only with SEC_COMMIT mappings, not SEC_IMAGE! (in that case, just do VA = base + rva...)
-ULONG64 ModRvaToOffset(ULONG64 base, PIMAGE_NT_HEADERS ntHeaders, ULONG64 rva)
+static ULONG64 RvaToVa(ULONG64 base, PIMAGE_NT_HEADERS ntHeaders, ULONG64 rva)
 {
     PIMAGE_SECTION_HEADER section = IMAGE_FIRST_SECTION(ntHeaders);
     for(WORD i = 0; i < ntHeaders->FileHeader.NumberOfSections; ++i)
@@ -84,19 +84,12 @@ static void ReadExportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
                      FALSE,
                      IMAGE_DIRECTORY_ENTRY_EXPORT,
                      &exportDirSize);
-    if(exportDirSize == 0 || exportDir == nullptr ||
-            (ULONG_PTR)exportDir + exportDirSize > FileMapVA + Info.loadedSize || // Check if exportDir fits into the mapped area
-            (ULONG_PTR)exportDir + exportDirSize < (ULONG_PTR)exportDir // Check for ULONG_PTR wraparound (e.g. when exportDirSize == 0xfffff000)
-            || exportDir->NumberOfFunctions == 0)
-        return;
-    DWORD64 totalFunctionSize = exportDir->NumberOfFunctions * sizeof(ULONG_PTR);
-    if(totalFunctionSize / exportDir->NumberOfFunctions != sizeof(ULONG_PTR) || // Check for overflow
-            totalFunctionSize > Info.loadedSize) // Check for impossible number of exports
+    if(exportDirSize == 0 || exportDir == nullptr || exportDir->NumberOfFunctions == 0)
         return;
 
     auto rva2offset = [&Info](ULONG64 rva)
     {
-        return ModRvaToOffset(0, Info.headers, rva);
+        return RvaToVa(0, Info.headers, rva);
     };
 
     auto addressOfFunctionsOffset = rva2offset(exportDir->AddressOfFunctions);
@@ -111,8 +104,7 @@ static void ReadExportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
     auto addressOfNameOrdinalsOffset = rva2offset(exportDir->AddressOfNameOrdinals);
     auto addressOfNameOrdinals = PWORD(addressOfNameOrdinalsOffset ? addressOfNameOrdinalsOffset + FileMapVA : 0);
 
-    // Do not reserve memory based on untrusted input
-    //Info.exports.reserve(exportDir->NumberOfFunctions);
+    Info.exports.reserve(exportDir->NumberOfFunctions);
     Info.exportOrdinalBase = exportDir->Base;
 
     // TODO: 'invalid address' below means an RVA that is obviously invalid, like being greater than SizeOfImage.
@@ -122,13 +114,6 @@ static void ReadExportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
     // Note that we're loading this file because the debuggee did; that makes it at least somewhat plausible that we will also survive
     for(DWORD i = 0; i < exportDir->NumberOfFunctions; i++)
     {
-        // Check if addressOfFunctions[i] is valid
-        ULONG_PTR target = (ULONG_PTR)addressOfFunctions + i * sizeof(DWORD);
-        if(target > FileMapVA + Info.loadedSize || target < (ULONG_PTR)addressOfFunctions)
-        {
-            continue;
-        }
-
         // It is possible the AddressOfFunctions contain zero RVAs. GetProcAddress for these ordinals returns zero.
         // "The reason for it is to assign a particular ordinal to a function." - NTCore
         if(!addressOfFunctions[i])
@@ -138,7 +123,7 @@ static void ReadExportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
         auto & entry = Info.exports.back();
         entry.ordinal = i + exportDir->Base;
         entry.rva = addressOfFunctions[i];
-        const auto entryVa = ModRvaToOffset(FileMapVA, Info.headers, entry.rva);
+        const auto entryVa = RvaToVa(FileMapVA, Info.headers, entry.rva);
         entry.forwarded = entryVa >= (ULONG64)exportDir && entryVa < (ULONG64)exportDir + exportDirSize;
         if(entry.forwarded)
         {
@@ -150,37 +135,12 @@ static void ReadExportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
 
     for(DWORD i = 0; i < exportDir->NumberOfNames; i++)
     {
-        // Check if addressOfNameOrdinals[i] is valid
-        ULONG_PTR target = (ULONG_PTR)addressOfNameOrdinals + i * sizeof(WORD);
-        if(target > FileMapVA + Info.loadedSize || target < (ULONG_PTR)addressOfNameOrdinals)
-        {
-            continue;
-        }
-
         DWORD index = addressOfNameOrdinals[i];
-        if(index < exportDir->NumberOfFunctions) // Silent ignore (2) by ntdll loader: bogus AddressOfNameOrdinals indices
+        if(index < Info.exports.size()) // Silent ignore (2) by ntdll loader: bogus AddressOfNameOrdinals indices
         {
-            // Check if addressOfNames[i] is valid
-            target = (ULONG_PTR)addressOfNames + i * sizeof(DWORD);
-            if(target > FileMapVA + Info.loadedSize || target < (ULONG_PTR)addressOfNames)
-            {
-                continue;
-            }
-
             auto nameOffset = rva2offset(addressOfNames[i]);
             if(nameOffset) // Silent ignore (3) by ntdll loader: invalid names or addresses of names
-            {
-                // Info.exports has excluded some invalid exports, so addressOfNameOrdinals[i] is not equal to
-                // the index of Info.exports. We need to iterate over Info.exports.
-                for(size_t j = 0; j < Info.exports.size(); j++)
-                {
-                    if(index + exportDir->Base == Info.exports[j].ordinal)
-                    {
-                        Info.exports[j].name = String((const char*)(nameOffset + FileMapVA));
-                        break;
-                    }
-                }
-            }
+                Info.exports[index].name = String((const char*)(nameOffset + FileMapVA));
         }
     }
 
@@ -196,12 +156,14 @@ static void ReadExportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
     Info.exportsByRva.resize(Info.exports.size());
     for(size_t i = 0; i < Info.exports.size(); i++)
     {
-        Info.exportsByName[i].index = i;
-        Info.exportsByName[i].name = Info.exports[i].name.c_str(); //NOTE: DO NOT MODIFY name is any way!
+        Info.exportsByName[i] = i;
         Info.exportsByRva[i] = i;
     }
 
-    std::sort(Info.exportsByName.begin(), Info.exportsByName.end());
+    std::sort(Info.exportsByName.begin(), Info.exportsByName.end(), [&Info](size_t a, size_t b)
+    {
+        return Info.exports.at(a).name < Info.exports.at(b).name;
+    });
 
     std::sort(Info.exportsByRva.begin(), Info.exportsByRva.end(), [&Info](size_t a, size_t b)
     {
@@ -224,15 +186,13 @@ static void ReadImportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
                             FALSE,
                             IMAGE_DIRECTORY_ENTRY_IMPORT,
                             &importDirSize);
-    if(importDirSize == 0 || importDescriptor == nullptr ||
-            (ULONG_PTR)importDescriptor + importDirSize > FileMapVA + Info.loadedSize || // Check if importDescriptor fits into the mapped area
-            (ULONG_PTR)importDescriptor + importDirSize < (ULONG_PTR)importDescriptor) // Check for ULONG_PTR wraparound (e.g. when importDirSize == 0xfffff000)
+    if(importDirSize == 0 || importDescriptor == nullptr)
         return;
 
     const ULONG64 ordinalFlag = IMAGE64(Info.headers) ? IMAGE_ORDINAL_FLAG64 : IMAGE_ORDINAL_FLAG32;
     auto rva2offset = [&Info](ULONG64 rva)
     {
-        return ModRvaToOffset(0, Info.headers, rva);
+        return RvaToVa(0, Info.headers, rva);
     };
 
     for(size_t moduleIndex = 0; importDescriptor->Name != 0; ++importDescriptor, ++moduleIndex)
@@ -263,7 +223,7 @@ static void ReadImportDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
             addressOfDataValue &= ~ordinalFlag;
 
             auto addressOfDataOffset = rva2offset(addressOfDataValue);
-            if(!addressOfDataOffset && !ordinalFlagSet) // Invalid entries are ignored. Of course the app will crash if it ever calls the function, but whose fault is that?
+            if(!addressOfDataOffset) // Invalid entries are ignored. Of course the app will crash if it ever calls the function, but whose fault is that?
                 continue;
 
             Info.imports.emplace_back();
@@ -314,9 +274,7 @@ static void ReadTlsCallbacks(MODINFO & Info, ULONG_PTR FileMapVA)
                   FALSE,
                   IMAGE_DIRECTORY_ENTRY_TLS,
                   &tlsDirSize);
-    if(tlsDir == nullptr /*|| tlsDirSize == 0*/ || // The loader completely ignores the directory size. Setting it to 0 is an anti-debug trick
-            (ULONG_PTR)tlsDir + tlsDirSize > FileMapVA + Info.loadedSize || // Check if tlsDir fits into the mapped area
-            (ULONG_PTR)tlsDir + tlsDirSize < (ULONG_PTR)tlsDir) // Check for ULONG_PTR wraparound (e.g. when tlsDirSize == 0xfffff000)
+    if(tlsDir == nullptr /*|| tlsDirSize == 0*/) // The loader completely ignores the directory size. Setting it to 0 is an anti-debug trick
         return;
 
     ULONG64 addressOfCallbacks = IMAGE64(Info.headers)
@@ -326,14 +284,14 @@ static void ReadTlsCallbacks(MODINFO & Info, ULONG_PTR FileMapVA)
         return;
 
     auto imageBase = HEADER_FIELD(Info.headers, ImageBase);
-    auto tlsArrayOffset = ModRvaToOffset(0, Info.headers, tlsDir->AddressOfCallBacks - imageBase);
+    auto tlsArrayOffset = RvaToVa(0, Info.headers, tlsDir->AddressOfCallBacks - imageBase);
     if(!tlsArrayOffset)
         return;
 
     // TODO: proper bounds checking
     auto tlsArray = PULONG_PTR(tlsArrayOffset + FileMapVA);
     while(*tlsArray)
-        Info.tlsCallbacks.push_back(duint(*tlsArray++ - imageBase + Info.base));
+        Info.tlsCallbacks.push_back(*tlsArray++ - imageBase + Info.base);
 }
 
 #ifndef IMAGE_REL_BASED_RESERVED
@@ -359,9 +317,7 @@ static void ReadBaseRelocationTable(MODINFO & Info, ULONG_PTR FileMapVA)
                           FALSE,
                           IMAGE_DIRECTORY_ENTRY_BASERELOC,
                           &totalBytes);
-    if(baseRelocBlock == nullptr || totalBytes == 0 ||
-            (ULONG_PTR)baseRelocBlock + totalBytes > FileMapVA + Info.loadedSize || // Check if baseRelocBlock fits into the mapped area
-            (ULONG_PTR)baseRelocBlock + totalBytes < (ULONG_PTR)baseRelocBlock) // Check for ULONG_PTR wraparound (e.g. when totalBytes == 0xfffff000)
+    if(baseRelocBlock == nullptr || totalBytes == 0 || (ULONG_PTR)baseRelocBlock + totalBytes > FileMapVA + Info.loadedSize)
         return;
 
     // Until we reach the end of the relocation table
@@ -423,7 +379,7 @@ static void ReadBaseRelocationTable(MODINFO & Info, ULONG_PTR FileMapVA)
 }
 
 //Useful information: http://www.debuginfo.com/articles/debuginfomatch.html
-static void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
+void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
 {
     // Get the debug directory and its size
     ULONG debugDirSize;
@@ -431,12 +387,8 @@ static void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
                     FALSE,
                     IMAGE_DIRECTORY_ENTRY_DEBUG,
                     &debugDirSize);
-    if(debugDirSize == 0 || debugDir == nullptr ||
-            (ULONG_PTR)debugDir + debugDirSize > FileMapVA + Info.loadedSize || /* Check if debugDir fits into the mapped area */
-            (ULONG_PTR)debugDir + debugDirSize < (ULONG_PTR)debugDir) /* Check for ULONG_PTR wraparound (e.g. when debugDirSize == 0xfffff000) */
-    {
+    if(debugDirSize == 0 || debugDir == nullptr)
         return;
-    }
 
     struct CV_HEADER
     {
@@ -463,7 +415,7 @@ static void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
     const auto supported = [&Info](PIMAGE_DEBUG_DIRECTORY entry)
     {
         // Check for valid RVA
-        const auto offset = ModRvaToOffset(0, Info.headers, entry->AddressOfRawData);
+        const auto offset = RvaToVa(0, Info.headers, entry->AddressOfRawData);
         if(!offset)
             return false;
 
@@ -556,7 +508,7 @@ static void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
     }
 
     // At this point we know the entry is a valid CV one
-    auto cvData = (unsigned char*)(FileMapVA + ModRvaToOffset(0, Info.headers, entry->AddressOfRawData));
+    auto cvData = (unsigned char*)(FileMapVA + RvaToVa(0, Info.headers, entry->AddressOfRawData));
     auto signature = *(DWORD*)cvData;
     if(signature == '01BN')
     {
@@ -575,7 +527,6 @@ static void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
                             cv->Age);
         Info.pdbFile = String((const char*)cv->PdbFileName, entry->SizeOfData - FIELD_OFFSET(CV_INFO_PDB70, PdbFileName));
         memcpy(&Info.pdbValidation.guid, &cv->Signature, sizeof(GUID));
-        Info.pdbValidation.signature = 0;
         Info.pdbValidation.age = cv->Age;
     }
 
@@ -635,48 +586,6 @@ static void ReadDebugDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
     }
 }
 
-#ifdef _WIN64
-static void ReadExceptionDirectory(MODINFO & Info, ULONG_PTR FileMapVA)
-{
-    // Clear runtime functions
-    Info.runtimeFunctions.clear();
-
-    // Get address and size of exception directory
-    ULONG totalBytes;
-    auto baseRuntimeFunctions = (PRUNTIME_FUNCTION)RtlImageDirectoryEntryToData((PVOID)FileMapVA,
-                                FALSE,
-                                IMAGE_DIRECTORY_ENTRY_EXCEPTION,
-                                &totalBytes);
-    if(baseRuntimeFunctions == nullptr || totalBytes == 0 ||
-            (ULONG_PTR)baseRuntimeFunctions + totalBytes > FileMapVA + Info.loadedSize || // Check if baseRuntimeFunctions fits into the mapped area
-            (ULONG_PTR)baseRuntimeFunctions + totalBytes < (ULONG_PTR)baseRuntimeFunctions) // Check for ULONG_PTR wraparound (e.g. when totalBytes == 0xfffff000)
-        return;
-
-    Info.runtimeFunctions.resize(totalBytes / sizeof(RUNTIME_FUNCTION));
-    for(size_t i = 0; i < Info.runtimeFunctions.size(); i++)
-        Info.runtimeFunctions[i] = baseRuntimeFunctions[i];
-
-    std::stable_sort(Info.runtimeFunctions.begin(), Info.runtimeFunctions.end(), [](const RUNTIME_FUNCTION & a, const RUNTIME_FUNCTION & b)
-    {
-        return std::tie(a.BeginAddress, a.EndAddress) < std::tie(b.BeginAddress, b.EndAddress);
-    });
-}
-#endif // _WIN64
-
-static bool GetUnsafeModuleInfoImpl(MODINFO & Info, ULONG_PTR FileMapVA, void(*func)(MODINFO &, ULONG_PTR), const char* name)
-{
-    __try
-    {
-        func(Info, FileMapVA);
-    }
-    __except(EXCEPTION_EXECUTE_HANDLER)
-    {
-        dprintf(QT_TRANSLATE_NOOP("DBG", "Exception while getting module info (%s), please report...\n"), name);
-        return false;
-    }
-    return true;
-}
-
 void GetModuleInfo(MODINFO & Info, ULONG_PTR FileMapVA)
 {
     // Get the PE headers
@@ -693,7 +602,7 @@ void GetModuleInfo(MODINFO & Info, ULONG_PTR FileMapVA)
     // OEP can't start at the PE header/offset 0 -- except if module is an EXE.
     Info.entry = moduleOEP + Info.base;
 
-    Info.headerImageBase = (duint)HEADER_FIELD(Info.headers, ImageBase);
+    Info.headerImageBase = HEADER_FIELD(Info.headers, ImageBase);
 
     if(!moduleOEP)
     {
@@ -701,12 +610,6 @@ void GetModuleInfo(MODINFO & Info, ULONG_PTR FileMapVA)
         if((Info.headers->FileHeader.Characteristics & IMAGE_FILE_DLL) == IMAGE_FILE_DLL)
             Info.entry = 0;
     }
-
-    // Setup the pseudo entry point symbol
-    Info.entrySymbol.name = "OptionalHeader.AddressOfEntryPoint";
-    Info.entrySymbol.forwarded = false;
-    Info.entrySymbol.ordinal = 0;
-    Info.entrySymbol.rva = (DWORD)moduleOEP;
 
     // Enumerate all PE sections
     WORD sectionCount = Info.headers->FileHeader.NumberOfSections;
@@ -734,30 +637,14 @@ void GetModuleInfo(MODINFO & Info, ULONG_PTR FileMapVA)
         ntSection++;
     }
 
-#define GetUnsafeModuleInfo(func) GetUnsafeModuleInfoImpl(Info, FileMapVA, func, #func)
-    if(!GetUnsafeModuleInfo(ReadExportDirectory))
-    {
-        Info.exports.clear();
-        Info.exportOrdinalBase = 0;
-        Info.exportsByName.clear();
-        Info.exportsByRva.clear();
-    }
-    if(!GetUnsafeModuleInfo(ReadImportDirectory))
-    {
-        Info.importModules.clear();
-        Info.imports.clear();
-        Info.importsByRva.clear();
-    }
-    GetUnsafeModuleInfo(ReadTlsCallbacks);
-    GetUnsafeModuleInfo(ReadBaseRelocationTable);
-    GetUnsafeModuleInfo(ReadDebugDirectory);
-#ifdef _WIN64
-    GetUnsafeModuleInfo(ReadExceptionDirectory);
-#endif // _WIN64
-#undef GetUnsafeModuleInfo
+    ReadExportDirectory(Info, FileMapVA);
+    ReadImportDirectory(Info, FileMapVA);
+    ReadTlsCallbacks(Info, FileMapVA);
+    ReadBaseRelocationTable(Info, FileMapVA);
+    ReadDebugDirectory(Info, FileMapVA);
 }
 
-bool ModLoad(duint Base, duint Size, const char* FullPath, bool loadSymbols)
+bool ModLoad(duint Base, duint Size, const char* FullPath)
 {
     // Handle a new module being loaded
     if(!Base || !Size || !FullPath)
@@ -821,11 +708,11 @@ bool ModLoad(duint Base, duint Size, const char* FullPath, bool loadSymbols)
     Utf8Sysdir.append("\\");
     if(_memicmp(Utf8Sysdir.c_str(), FullPath, Utf8Sysdir.size()) == 0)
     {
-        info.party = mod_system;
+        info.party = 1;
     }
     else
     {
-        info.party = mod_user;
+        info.party = 0;
     }
 
     // Load module data
@@ -862,16 +749,8 @@ bool ModLoad(duint Base, duint Size, const char* FullPath, bool loadSymbols)
         GetModuleInfo(info, (ULONG_PTR)data());
     }
 
-    info.symbols = &EmptySymbolSource; // empty symbol source per default
-
-    if(loadSymbols)
-    {
-        for(const auto & pdbPath : info.pdbPaths)
-        {
-            if(info.loadSymbols(pdbPath, bForceLoadSymbols))
-                break;
-        }
-    }
+    // TODO: setting to auto load symbols
+    info.loadSymbols();
 
     // Add module to list
     EXCLUSIVE_ACQUIRE(LockModules);
@@ -913,7 +792,7 @@ bool ModUnload(duint Base)
     return true;
 }
 
-void ModClear(bool updateGui)
+void ModClear()
 {
     {
         // Clean up all the modules
@@ -928,8 +807,7 @@ void ModClear(bool updateGui)
     }
 
     // Tell the symbol updater
-    if(updateGui)
-        GuiSymbolUpdateModuleList(0, nullptr);
+    GuiSymbolUpdateModuleList(0, nullptr);
 }
 
 MODINFO* ModInfoFromAddr(duint Address)
@@ -1133,7 +1011,7 @@ void ModEnum(const std::function<void(const MODINFO &)> & cbEnum)
         cbEnum(*mod.second);
 }
 
-MODULEPARTY ModGetParty(duint Address)
+int ModGetParty(duint Address)
 {
     SHARED_ACQUIRE(LockModules);
 
@@ -1141,12 +1019,12 @@ MODULEPARTY ModGetParty(duint Address)
 
     // If the module is not found, it is an user module
     if(!module)
-        return mod_user;
+        return 0;
 
     return module->party;
 }
 
-void ModSetParty(duint Address, MODULEPARTY Party)
+void ModSetParty(duint Address, int Party)
 {
     EXCLUSIVE_ACQUIRE(LockModules);
 
@@ -1231,59 +1109,46 @@ bool ModRelocationsInRange(duint Address, duint Size, std::vector<MODRELOCATIONI
     return !Relocations.empty();
 }
 
-#if _WIN64
-const RUNTIME_FUNCTION* MODINFO::findRuntimeFunction(DWORD rva) const
-{
-    const auto found = std::lower_bound(runtimeFunctions.cbegin(), runtimeFunctions.cend(), rva, [](const RUNTIME_FUNCTION & a, const DWORD & rva)
-    {
-        return a.EndAddress <= rva;
-    });
-
-    if(found != runtimeFunctions.cend() && rva >= found->BeginAddress)
-        return &*found;
-
-    return nullptr;
-}
-#endif
-
-bool MODINFO::loadSymbols(const String & pdbPath, bool forceLoad)
+bool MODINFO::loadSymbols()
 {
     unloadSymbols();
+    symbols = &EmptySymbolSource; // empty symbol source per default
 
     // Try DIA
     if(symbols == &EmptySymbolSource && SymbolSourceDIA::isLibraryAvailable())
     {
         // TODO: do something with searchPaths
-        std::string modname = name;
-        modname += extension;
         DiaValidationData_t validationData;
         memcpy(&validationData.guid, &pdbValidation.guid, sizeof(GUID));
         validationData.signature = pdbValidation.signature;
         validationData.age = pdbValidation.age;
         SymbolSourceDIA* symSource = new SymbolSourceDIA();
-        if(!FileExists(pdbPath.c_str()))
+        for(const auto & pdbPath : pdbPaths)
         {
-            GuiSymbolLogAdd(StringUtils::sprintf("[DIA] Skipping non-existent PDB: %s\n", pdbPath.c_str()).c_str());
-        }
-        else if(symSource->loadPDB(pdbPath, modname, base, size, forceLoad ? nullptr : &validationData))
-        {
-            symSource->resizeSymbolBitmap(size);
+            if(!FileExists(pdbPath.c_str()))
+            {
+                GuiSymbolLogAdd(StringUtils::sprintf("[DIA] Skipping non-existent PDB: %s\n", pdbPath.c_str()).c_str());
+            }
+            else if(symSource->loadPDB(pdbPath, base, size, bForceLoadSymbols ? nullptr : &validationData))
+            {
+                symSource->resizeSymbolBitmap(size);
 
-            symbols = symSource;
+                symbols = symSource;
 
-            std::string msg;
-            if(symSource->isLoading())
-                msg = StringUtils::sprintf("[DIA] Loading PDB (async): %s\n", pdbPath.c_str());
+                std::string msg;
+                if(symSource->isLoading())
+                    msg = StringUtils::sprintf("[DIA] Loading PDB (async): %s\n", pdbPath.c_str());
+                else
+                    msg = StringUtils::sprintf("[DIA] Loaded PDB: %s\n", pdbPath.c_str());
+                GuiSymbolLogAdd(msg.c_str());
+
+                return true;
+            }
             else
-                msg = StringUtils::sprintf("[DIA] Loaded PDB: %s\n", pdbPath.c_str());
-            GuiSymbolLogAdd(msg.c_str());
-
-            return true;
-        }
-        else
-        {
-            // TODO: more detailled error codes?
-            GuiSymbolLogAdd(StringUtils::sprintf("[DIA] Failed to load PDB: %s\n", pdbPath.c_str()).c_str());
+            {
+                // TODO: more detailled error codes?
+                GuiSymbolLogAdd(StringUtils::sprintf("[DIA] Failed to load PDB: %s\n", pdbPath.c_str()).c_str());
+            }
         }
         delete symSource;
     }
@@ -1317,21 +1182,6 @@ void MODINFO::unmapFile()
         StaticFileUnloadW(StringUtils::Utf8ToUtf16(path).c_str(), false, fileHandle, loadedSize, fileMap, fileMapVA);
 }
 
-const MODEXPORT* MODINFO::findExport(duint rva) const
-{
-    if(exports.size())
-    {
-        auto found = std::lower_bound(exportsByRva.begin(), exportsByRva.end(), rva, [this](size_t index, duint rva)
-        {
-            return exports.at(index).rva < rva;
-        });
-        found = found != exportsByRva.end() && rva >= exports.at(*found).rva ? found : exportsByRva.end();
-        if(found != exportsByRva.end())
-            return &exports[*found];
-    }
-    return nullptr;
-}
-
 void MODIMPORT::convertToGuiSymbol(duint base, SYMBOLINFO* info) const
 {
     info->addr = base + iatRva;
@@ -1339,7 +1189,6 @@ void MODIMPORT::convertToGuiSymbol(duint base, SYMBOLINFO* info) const
     info->decoratedSymbol = (char*)name.c_str();
     info->undecoratedSymbol = (char*)undecoratedName.c_str();
     info->freeDecorated = info->freeUndecorated = false;
-    info->ordinal = 0;
 }
 
 void MODEXPORT::convertToGuiSymbol(duint base, SYMBOLINFO* info) const
@@ -1349,5 +1198,4 @@ void MODEXPORT::convertToGuiSymbol(duint base, SYMBOLINFO* info) const
     info->decoratedSymbol = (char*)name.c_str();
     info->undecoratedSymbol = (char*)undecoratedName.c_str();
     info->freeDecorated = info->freeUndecorated = false;
-    info->ordinal = ordinal;
 }

@@ -4,8 +4,6 @@
 #include <QAction>
 #include <QDialog>
 #include <QMap>
-#include <QColorDialog>
-#include <QLineEdit>
 
 namespace Ui
 {
@@ -77,11 +75,9 @@ private slots:
     void on_buttonApplicationFont_clicked();
     void on_buttonFontDefaults_clicked();
     void rejectedSlot();
-    void colorSelectionChangedSlot(QColor color);
 
 private:
     Ui::AppearanceDialog* ui;
-    QLineEdit* colorLineEdit = nullptr;
 
     struct ColorInfo
     {
@@ -105,9 +101,6 @@ private:
     void colorInfoListAppend(QString propertyName, QString colorName, QString backgroundColorName);
     void colorInfoListInit();
     void fontInit();
-
-    void selectColor(QLineEdit* lineEdit, QColorDialog::ColorDialogOptions options = QColorDialog::ColorDialogOptions());
-    static QString colorToString(const QColor & color);
 };
 
 #endif // APPEARANCEDIALOG_H

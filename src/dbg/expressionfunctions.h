@@ -19,9 +19,9 @@ private:
     struct Function
     {
         String name;
-        int argc = 0;
+        int argc;
         CBEXPRESSIONFUNCTION cbFunction;
-        void* userdata = nullptr;
+        void* userdata;
         std::vector<String> aliases;
     };
 

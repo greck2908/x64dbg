@@ -48,6 +48,8 @@ private slots:
     void moduleDownloadAllSymbols();
     void moduleCopyPath();
     void moduleBrowse();
+    void moduleYara();
+    void moduleYaraFile();
     void moduleSetUser();
     void moduleSetSystem();
     void moduleSetParty();
@@ -55,6 +57,7 @@ private slots:
     void toggleBreakpoint();
     void toggleBookmark();
     void refreshShortcutsSlot();
+    void moduleEntropy();
     void emptySearchResultSlot();
     void selectionGetSlot(SELECTIONDATA* selection);
     void moduleLoad();
@@ -82,6 +85,9 @@ private:
     QAction* mDownloadSymbolsAction;
     QAction* mDownloadAllSymbolsAction;
     QAction* mCopyPathAction;
+    QAction* mYaraAction;
+    QAction* mYaraFileAction;
+    QAction* mEntropyAction;
     QAction* mModSetUserAction;
     QAction* mModSetSystemAction;
     QAction* mModSetPartyAction;
@@ -89,7 +95,6 @@ private:
     QAction* mFollowInMemMap;
     QAction* mLoadLib;
     QAction* mFreeLib;
-    QMenu* mPluginMenu;
 
     static void cbSymbolEnum(SYMBOLINFO* symbol, void* user);
 };

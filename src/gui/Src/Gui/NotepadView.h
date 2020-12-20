@@ -2,21 +2,18 @@
 #define NOTEPADVIEW_H
 
 #include <QPlainTextEdit>
-#include "BridgeResult.h"
 
 class NotepadView : public QPlainTextEdit
 {
     Q_OBJECT
 public:
-    NotepadView(QWidget* parent, BridgeResult::Type type);
+    explicit NotepadView(QWidget* parent = 0);
 
 public slots:
     void updateStyle();
     void setNotes(const QString text);
     void getNotes(void* ptr);
 
-private:
-    BridgeResult::Type mType;
 };
 
 #endif // NOTEPADVIEW_H

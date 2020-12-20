@@ -5,7 +5,6 @@
 
 class QMessageBox;
 class MRUList;
-class LineEditDialog;
 
 class ScriptView : public StdTable
 {
@@ -62,7 +61,6 @@ private:
     MenuBuilder* mMenu;
     QMessageBox* msg;
     MRUList* mMRUList;
-    LineEditDialog* mCmdLineEdit;
 };
 
 #endif // SCRIPTVIEW_H

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>386</width>
-    <height>525</height>
+    <width>381</width>
+    <height>514</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -40,6 +40,44 @@
        <string>Events</string>
       </attribute>
       <layout class="QGridLayout" name="gridLayout">
+       <item row="1" column="0">
+        <widget class="QCheckBox" name="chkSystemBreakpoint">
+         <property name="text">
+          <string>System Breakpoint*</string>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="lblBreakOn">
+         <property name="text">
+          <string>Break on:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QCheckBox" name="chkDllLoad">
+         <property name="text">
+          <string>DLL Load</string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0">
+        <widget class="QCheckBox" name="chkAttachBreakpoint">
+         <property name="text">
+          <string>Attach Breakpoint</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
+        <widget class="QCheckBox" name="chkDllEntry">
+         <property name="text">
+          <string>DLL Entry</string>
+         </property>
+        </widget>
+       </item>
        <item row="3" column="0">
         <widget class="QCheckBox" name="chkEntryBreakpoint">
          <property name="text">
@@ -51,34 +89,51 @@
         </widget>
        </item>
        <item row="2" column="1">
-        <widget class="QCheckBox" name="chkThreadStart">
+        <widget class="QCheckBox" name="chkDllUnload">
          <property name="text">
-          <string>Thread Start</string>
+          <string>DLL Unload</string>
          </property>
         </widget>
        </item>
-       <item row="9" column="1">
-        <widget class="QCheckBox" name="chkDllLoadSystem">
+       <item row="2" column="0">
+        <widget class="QCheckBox" name="chkTlsCallbacks">
          <property name="text">
-          <string>System DLL Load</string>
+          <string>TLS Callbacks*</string>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
          </property>
         </widget>
        </item>
-       <item row="1" column="1">
+       <item row="8" column="1">
+        <widget class="QCheckBox" name="chkThreadEnd">
+         <property name="text">
+          <string>Thread End</string>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="0">
         <widget class="QCheckBox" name="chkThreadEntry">
          <property name="text">
           <string>Thread Entry</string>
          </property>
         </widget>
        </item>
-       <item row="11" column="1">
-        <widget class="QCheckBox" name="chkDllUnloadSystem">
+       <item row="9" column="1">
+        <widget class="QCheckBox" name="chkDebugStrings">
          <property name="text">
-          <string>System DLL Unload</string>
+          <string>Debug Strings</string>
          </property>
         </widget>
        </item>
-       <item row="13" column="0">
+       <item row="3" column="1">
+        <widget class="QCheckBox" name="chkThreadStart">
+         <property name="text">
+          <string>Thread Start</string>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="0">
         <spacer name="verticalSpacer_4">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -90,89 +145,6 @@
           </size>
          </property>
         </spacer>
-       </item>
-       <item row="2" column="0">
-        <widget class="QCheckBox" name="chkNtTerminateProcess">
-         <property name="text">
-          <string>NtTerminateProcess*</string>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="0">
-        <widget class="QCheckBox" name="chkTlsCallbacks">
-         <property name="text">
-          <string>TLS Callbacks*</string>
-         </property>
-         <property name="checked">
-          <bool>false</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="1">
-        <widget class="QCheckBox" name="chkThreadEnd">
-         <property name="text">
-          <string>Thread End</string>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="0">
-        <widget class="QCheckBox" name="chkDllEntry">
-         <property name="text">
-          <string>DLL Entry</string>
-         </property>
-        </widget>
-       </item>
-       <item row="9" column="0">
-        <widget class="QCheckBox" name="chkDllLoad">
-         <property name="text">
-          <string>DLL Load</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="0">
-        <widget class="QLabel" name="lblBreakOn">
-         <property name="text">
-          <string>Break on:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="0">
-        <widget class="QCheckBox" name="chkSystemBreakpoint">
-         <property name="text">
-          <string>System Breakpoint*</string>
-         </property>
-         <property name="checked">
-          <bool>false</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="1">
-        <widget class="QCheckBox" name="chkTlsCallbacksSystem">
-         <property name="text">
-          <string>System TLS Callbacks*</string>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="1">
-        <widget class="QCheckBox" name="chkDllEntrySystem">
-         <property name="text">
-          <string>System DLL Entry</string>
-         </property>
-        </widget>
-       </item>
-       <item row="11" column="0">
-        <widget class="QCheckBox" name="chkDllUnload">
-         <property name="text">
-          <string>DLL Unload</string>
-         </property>
-        </widget>
-       </item>
-       <item row="12" column="0">
-        <widget class="QCheckBox" name="chkDebugStrings">
-         <property name="text">
-          <string>Debug Strings</string>
-         </property>
-        </widget>
        </item>
       </layout>
      </widget>
@@ -194,19 +166,22 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout">
-         <item>
-          <widget class="QGroupBox" name="groupBoxCalculationType">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="title">
-            <string>Calculation Type</string>
-           </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_4">
+        <widget class="QGroupBox" name="groupBox_2">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>Calculation Type</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_6">
+          <item>
+           <layout class="QHBoxLayout" name="layoutCalulationType">
+            <property name="sizeConstraint">
+             <enum>QLayout::SetNoConstraint</enum>
+            </property>
             <item>
              <widget class="QRadioButton" name="radioSigned">
               <property name="text">
@@ -225,38 +200,12 @@
              </widget>
             </item>
            </layout>
-          </widget>
-         </item>
-         <item>
-          <widget class="QGroupBox" name="groupBoxDebugEngine">
-           <property name="title">
-            <string>Debug Engine*</string>
-           </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_3">
-            <item>
-             <widget class="QRadioButton" name="radioTitanEngine">
-              <property name="text">
-               <string>TitanEngine</string>
-              </property>
-              <property name="checked">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QRadioButton" name="radioGleeBug">
-              <property name="text">
-               <string>GleeBug</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-        </layout>
+          </item>
+         </layout>
+        </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBoxDefaultBreakpointType">
+        <widget class="QGroupBox" name="groupBox">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
            <horstretch>0</horstretch>
@@ -383,7 +332,7 @@
         </widget>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayoutMaxTraceCount">
+        <layout class="QHBoxLayout" name="horizontalLayout_6">
          <item>
           <widget class="QLabel" name="lblMaxTraceCount">
            <property name="text">
@@ -425,27 +374,6 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayoutAnimateInterval">
-         <item>
-          <widget class="QLabel" name="lblAnimateInterval">
-           <property name="text">
-            <string>Animation per-step interval (ms)</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="spinAnimateInterval">
-           <property name="toolTip">
-            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The debugger sleeps for a certain time in order to keep the interval between animation steps constant as specified in this setting.&lt;/p&gt;&lt;p&gt;If you want to animate as fast as possible set this to 0.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-           </property>
-           <property name="maximum">
-            <number>99999</number>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
         <spacer name="verticalSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -473,7 +401,7 @@
         </widget>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayoutExceptions">
+        <layout class="QHBoxLayout" name="horizontalLayout_2">
          <item>
           <widget class="QListWidget" name="listExceptions">
            <property name="font">
@@ -490,7 +418,7 @@
          <item>
           <layout class="QVBoxLayout" name="layoutExceptionButtons">
            <item>
-            <spacer name="verticalSpacerExceptionsTop">
+            <spacer name="verticalSpacer_6">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
              </property>
@@ -524,7 +452,7 @@
             </widget>
            </item>
            <item>
-            <spacer name="verticalSpacerExceptionsBottom">
+            <spacer name="verticalSpacer_5">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
              </property>
@@ -618,13 +546,6 @@
         </widget>
        </item>
        <item>
-        <widget class="QCheckBox" name="chkNoBranchDisasmPreview">
-         <property name="text">
-          <string>Disable branch disassembly preview</string>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QCheckBox" name="chk0xPrefixValues">
          <property name="text">
           <string>0x prefix for values</string>
@@ -639,7 +560,7 @@
         </widget>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="layoutMaximumModuleNameSize">
+        <layout class="QHBoxLayout" name="horizontalLayout_7">
          <item>
           <widget class="QLabel" name="lblMaximumModuleNameSize">
            <property name="enabled">
@@ -690,7 +611,7 @@
         </layout>
        </item>
        <item>
-        <spacer name="verticalSpacerDisasm">
+        <spacer name="verticalSpacer_2">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -737,9 +658,9 @@
         </widget>
        </item>
        <item>
-        <widget class="QCheckBox" name="chkPidTidInHex">
+        <widget class="QCheckBox" name="chkPidInHex">
          <property name="text">
-          <string>Show PID/TID in HEX</string>
+          <string>Show PID in HEX</string>
          </property>
         </widget>
        </item>
@@ -772,20 +693,6 @@
         </widget>
        </item>
        <item>
-        <widget class="QCheckBox" name="chkGraphZoomMode">
-         <property name="text">
-          <string>Graph zoom mode</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QCheckBox" name="chkAutoFollowInStack">
-         <property name="text">
-          <string>Auto follow operand in stack</string>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QCheckBox" name="chkShowExitConfirmation">
          <property name="text">
           <string>Show exit confirmation dialog</string>
@@ -800,7 +707,14 @@
         </widget>
        </item>
        <item>
-        <spacer name="verticalSpacerGUI">
+        <widget class="QCheckBox" name="chkAsciiAddressDumpMode">
+         <property name="text">
+          <string>Show ASCII/Unicode in address dump mode</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_7">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -820,20 +734,20 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_10">
        <item>
-        <layout class="QVBoxLayout" name="verticalLayoutSymbolJIT">
+        <layout class="QVBoxLayout" name="verticalLayout_9">
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutSymbol">
+          <layout class="QHBoxLayout" name="horizontalLayout_4">
            <item>
-            <layout class="QVBoxLayout" name="verticalLayoutSymbolLabels">
+            <layout class="QVBoxLayout" name="verticalLayout_3">
              <item>
-              <widget class="QLabel" name="lblSymbolStore">
+              <widget class="QLabel" name="label_2">
                <property name="text">
                 <string>Symbol Store:</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLabel" name="lblSymbolPath">
+              <widget class="QLabel" name="label_3">
                <property name="text">
                 <string>Symbol Path:</string>
                </property>
@@ -842,7 +756,7 @@
             </layout>
            </item>
            <item>
-            <layout class="QVBoxLayout" name="verticalLayoutSymbolEdits">
+            <layout class="QVBoxLayout" name="verticalLayout_8">
              <item>
               <widget class="QLineEdit" name="editSymbolStore"/>
              </item>
@@ -861,7 +775,7 @@
           </widget>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayoutJIT">
+          <layout class="QHBoxLayout" name="horizontalLayout">
            <item>
             <widget class="QLabel" name="label">
              <property name="text">
@@ -893,7 +807,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QGroupBox" name="groupBoxSearchEngineURL">
+          <widget class="QGroupBox" name="groupBox_3">
            <property name="title">
             <string>Search Engine URL</string>
            </property>
@@ -935,14 +849,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QCheckBox" name="chkTransparentExceptionStepping">
-         <property name="text">
-          <string>Transparent exception stepping*</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacerMisc">
+        <spacer name="verticalSpacer_3">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -959,9 +866,9 @@
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayoutSaveCancel">
+    <layout class="QHBoxLayout" name="horizontalLayout_3">
      <item>
-      <spacer name="horizontalSpacerSaveCancel">
+      <spacer name="horizontalSpacer">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
        </property>
@@ -997,7 +904,18 @@
  <tabstops>
   <tabstop>tabWidget</tabstop>
   <tabstop>chkSystemBreakpoint</tabstop>
+  <tabstop>chkDllLoad</tabstop>
+  <tabstop>chkTlsCallbacks</tabstop>
+  <tabstop>chkDllUnload</tabstop>
   <tabstop>chkEntryBreakpoint</tabstop>
+  <tabstop>chkThreadStart</tabstop>
+  <tabstop>chkDllEntry</tabstop>
+  <tabstop>chkThreadEnd</tabstop>
+  <tabstop>chkAttachBreakpoint</tabstop>
+  <tabstop>chkDebugStrings</tabstop>
+  <tabstop>chkThreadEntry</tabstop>
+  <tabstop>radioSigned</tabstop>
+  <tabstop>radioUnsigned</tabstop>
   <tabstop>radioInt3Short</tabstop>
   <tabstop>radioInt3Long</tabstop>
   <tabstop>radioUd2</tabstop>

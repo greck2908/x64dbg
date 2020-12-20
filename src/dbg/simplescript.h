@@ -37,8 +37,8 @@ void scriptsetip(int line);
 void scriptreset();
 bool scriptgetbranchinfo(int line, SCRIPTBRANCH* info);
 void scriptlog(const char* msg);
-bool scriptLoadSync(const char* filename);
-bool scriptRunSync(int destline, bool silentRet);
+DWORD WINAPI scriptLoadSync(void* filename); // Load script synchronized
+DWORD WINAPI scriptRunSync(void* arg);
 
 //script commands
 

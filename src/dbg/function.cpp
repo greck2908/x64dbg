@@ -12,7 +12,6 @@ struct FunctionSerializer : JSONWrapper<FUNCTIONSINFO>
         setHex("end", value.end);
         setHex("icount", value.instructioncount);
         setBool("manual", value.manual);
-        setHex("parent", value.parent);
         return true;
     }
 
@@ -25,8 +24,6 @@ struct FunctionSerializer : JSONWrapper<FUNCTIONSINFO>
         if(!getString("module", mod))
             return false;
         value.modhash = ModHashFromName(mod.c_str());
-        value.parent = 0;
-        getHex("parent", value.parent);
         return getHex("start", value.start) &&
                getHex("end", value.end) &&
                getHex("icount", value.instructioncount) &&
@@ -41,7 +38,6 @@ struct Functions : SerializableModuleRangeMap<LockFunctions, FUNCTIONSINFO, Func
         auto base = ModBaseFromName(value.mod().c_str());
         value.start += base;
         value.end += base;
-        value.parent += base;
     }
 
 protected:
@@ -58,7 +54,7 @@ protected:
 
 static Functions functions;
 
-bool FunctionAdd(duint Start, duint End, bool Manual, duint InstructionCount, duint Parent)
+bool FunctionAdd(duint Start, duint End, bool Manual, duint InstructionCount)
 {
     // Make sure memory is readable
     if(!MemIsValidReadPtr(Start))
@@ -80,13 +76,11 @@ bool FunctionAdd(duint Start, duint End, bool Manual, duint InstructionCount, du
     function.end = End - moduleBase;
     function.manual = Manual;
     function.instructioncount = InstructionCount;
-    function.parent = Parent ? Parent : Start;
-    function.parent -= moduleBase;
 
     return functions.Add(function);
 }
 
-bool FunctionGet(duint Address, duint* Start, duint* End, duint* InstrCount, duint* Parent)
+bool FunctionGet(duint Address, duint* Start, duint* End, duint* InstrCount)
 {
     FUNCTIONSINFO function;
     if(!functions.Get(Functions::VaKey(Address, Address), function))
@@ -98,8 +92,6 @@ bool FunctionGet(duint Address, duint* Start, duint* End, duint* InstrCount, dui
         *End = function.end;
     if(InstrCount)
         *InstrCount = function.instructioncount;
-    if(Parent)
-        *Parent = function.parent;
     return true;
 }
 

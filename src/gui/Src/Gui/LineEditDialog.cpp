@@ -43,7 +43,6 @@ void LineEditDialog::setFpuMode()
 
 void LineEditDialog::setText(const QString & text)
 {
-    editText = text;
     ui->textEdit->setText(text);
     ui->textEdit->selectAll();
 }
@@ -72,7 +71,7 @@ void LineEditDialog::setCheckBoxText(const QString & text)
     ui->checkBox->setText(text);
 }
 
-void LineEditDialog::on_textEdit_textEdited(const QString & arg1)
+void LineEditDialog::on_textEdit_textChanged(const QString & arg1)
 {
     editText = arg1;
     if(this->fixed_size != 0)
@@ -104,17 +103,4 @@ void LineEditDialog::on_checkBox_toggled(bool checked)
 void LineEditDialog::setTextMaxLength(int length)
 {
     ui->textEdit->setMaxLength(length);
-}
-
-void LineEditDialog::on_buttonOk_clicked()
-{
-    ui->textEdit->addLineToHistory(editText);
-    ui->textEdit->setText("");
-    accept();
-}
-
-void LineEditDialog::on_buttonCancel_clicked()
-{
-    ui->textEdit->setText("");
-    close();
 }

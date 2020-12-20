@@ -39,7 +39,7 @@ BreakpointsView::BreakpointsView(QWidget* parent)
 
 void BreakpointsView::setupContextMenu()
 {
-    mMenuBuilder = new MenuBuilder(this, [](QMenu*)
+    mMenuBuilder = new MenuBuilder(this, [this](QMenu*)
     {
         return DbgIsDebugging();
     });
@@ -48,19 +48,12 @@ void BreakpointsView::setupContextMenu()
     {
         return isValidBp();
     };
-    mMenuBuilder->addAction(makeAction(DIcon(ArchValue("processor32.png", "processor64.png")), tr("Follow breakpoint"), SLOT(followBreakpointSlot())), [this](QMenu*)
-    {
-        if(!isValidBp())
-            return false;
-        if(selectedBp().type == bp_exception)
-            return false;
-        return true;
-    });
+
     mMenuBuilder->addAction(makeShortcutAction(DIcon("breakpoint_remove.png"), tr("&Remove"), SLOT(removeBreakpointSlot()), "ActionDeleteBreakpoint"), validBp);
     QAction* enableDisableBreakpoint = makeShortcutAction(DIcon("breakpoint_disable.png"), tr("Disable"), SLOT(toggleBreakpointSlot()), "ActionEnableDisableBreakpoint");
     mMenuBuilder->addAction(enableDisableBreakpoint, [this, enableDisableBreakpoint](QMenu*)
     {
-        if(!isValidBp() || !selectedBp().active)
+        if(!isValidBp())
             return false;
         if(selectedBp().enabled)
         {
@@ -74,7 +67,7 @@ void BreakpointsView::setupContextMenu()
         }
         return true;
     });
-    mMenuBuilder->addAction(makeShortcutAction(DIcon("breakpoint_edit_alt.png"), tr("&Edit"), SLOT(editBreakpointSlot()), "ActionEditBreakpoint"), validBp);
+    mMenuBuilder->addAction(makeShortcutAction(DIcon("breakpoint_edit_alt.png"), tr("&Edit"), SLOT(editBreakpointSlot()), "ActionBinaryEdit"), validBp);
     mMenuBuilder->addAction(makeShortcutAction(DIcon("breakpoint_reset_hitcount.png"), tr("Reset hit count"), SLOT(resetHitCountBreakpointSlot()), "ActionResetHitCountBreakpoint"), [this](QMenu*)
     {
         if(!isValidBp())
@@ -289,7 +282,7 @@ void BreakpointsView::updateBreakpointsSlot()
             if(DbgMemRead(bp.addr, data, sizeof(data)))
             {
                 auto instr = mDisasm->DisassembleAt(data, sizeof(data), 0, bp.addr);
-                ZydisTokenizer::TokenToRichText(instr.tokens, richDisasm, 0);
+                CapstoneTokenizer::TokenToRichText(instr.tokens, richDisasm, 0);
                 for(auto & token : richDisasm)
                     result += token.text;
             }
@@ -301,7 +294,7 @@ void BreakpointsView::updateBreakpointsSlot()
             auto colored = [&richSummary](QString text, QColor color)
             {
                 RichTextPainter::CustomRichText_t token;
-                token.underline = false;
+                token.highlight = false;
                 token.flags = RichTextPainter::FlagColor;
                 token.textColor = color;
                 token.text = text;
@@ -310,7 +303,7 @@ void BreakpointsView::updateBreakpointsSlot()
             auto text = [this, &richSummary](QString text)
             {
                 RichTextPainter::CustomRichText_t token;
-                token.underline = false;
+                token.highlight = false;
                 token.flags = RichTextPainter::FlagColor;
                 token.textColor = this->mTextColor;
                 token.text = text;
@@ -564,16 +557,10 @@ void BreakpointsView::followBreakpointSlot()
         return;
     auto & bp = selectedBp();
     if(bp.type == bp_exception || !bp.active)
-    {
-        GuiAddStatusBarMessage(tr("Cannot follow this breakpoint.\n").toUtf8().constData());
         return;
-    }
     duint addr = bp.type == bp_dll ? DbgModBaseFromName(bp.mod) : bp.addr;
     if(!DbgMemIsValidReadPtr(addr))
-    {
-        GuiAddStatusBarMessage(tr("Cannot follow this breakpoint.\n").toUtf8().constData());
         return;
-    }
     if(DbgFunctions()->MemIsCodePage(addr, false))
         DbgCmdExecDirect(QString("disasm %1").arg(ToPtrString(addr)));
     else
@@ -590,7 +577,10 @@ void BreakpointsView::removeBreakpointSlot()
         if(isValidBp(i))
         {
             const BRIDGEBP & bp = selectedBp(i);
-            Breakpoints::removeBP(bp);
+            if(bp.active)
+                Breakpoints::removeBP(bp);
+            else
+                DbgCmdExec(QString().sprintf("bc \"%s\":$%X", bp.mod, bp.addr));
         }
     }
 }
@@ -598,7 +588,7 @@ void BreakpointsView::removeBreakpointSlot()
 void BreakpointsView::toggleBreakpointSlot()
 {
     for(int i : getSelection())
-        if(isValidBp(i) && selectedBp(i).active)
+        if(isValidBp(i))
             Breakpoints::toggleBPByDisabling(selectedBp(i));
 }
 
@@ -623,7 +613,7 @@ void BreakpointsView::editBreakpointSlot()
             return;
         auto exec = [](const QString & command)
         {
-            DbgCmdExecDirect(command);
+            DbgCmdExecDirect(command.toUtf8().constData());
         };
         const BRIDGEBP & newBp = dialog.getBp();
         switch(bp.type)

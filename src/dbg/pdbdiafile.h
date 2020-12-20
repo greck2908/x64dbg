@@ -8,7 +8,6 @@
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
-#include <atomic>
 
 struct IDiaDataSource;
 struct IDiaSession;
@@ -20,8 +19,8 @@ public:
     struct Query_t
     {
         std::function<bool(DiaSymbol_t &)> callback;
-        bool collectUndecoratedNames = false;
-        bool collectSize = false;
+        bool collectUndecoratedNames;
+        bool collectSize;
     };
 
 private:
@@ -51,7 +50,7 @@ public:
 
     bool close();
 
-    bool enumerateLineNumbers(uint32_t rva, uint32_t size, std::vector<DiaLineInfo_t> & lines, std::map<DWORD, std::string> & files, const std::atomic<bool> & cancelled);
+    bool enumerateLineNumbers(uint32_t rva, uint32_t size, std::vector<DiaLineInfo_t> & lines, std::map<DWORD, std::string> & files);
 
     bool enumerateLexicalHierarchy(const Query_t & query);
 

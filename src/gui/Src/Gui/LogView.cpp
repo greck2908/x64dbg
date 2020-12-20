@@ -266,9 +266,6 @@ void LogView::addMsgToLogSlot(QByteArray msg)
     if(redirectError)
         msgUtf16.append(tr("fwrite() failed (GetLastError()= %1 ). Log redirection stopped.\n").arg(GetLastError()));
 
-    if(logBuffer.length() >= MAX_LOG_BUFFER_SIZE)
-        logBuffer.clear();
-
     logBuffer.append(msgUtf16);
     if(flushLog)
     {
@@ -294,10 +291,10 @@ void LogView::onAnchorClicked(const QUrl & link)
                 if(ok && DbgMemIsValidReadPtr(address))
                 {
                     if(DbgFunctions()->MemIsCodePage(address, true))
-                        DbgCmdExec(QString("disasm %1").arg(link.fragment()));
+                        DbgCmdExec(QString("disasm %1").arg(link.fragment()).toUtf8().constData());
                     else
                     {
-                        DbgCmdExecDirect(QString("dump %1").arg(link.fragment()));
+                        DbgCmdExecDirect(QString("dump %1").arg(link.fragment()).toUtf8().constData());
                         emit Bridge::getBridge()->getDumpAttention();
                     }
                 }
@@ -350,11 +347,11 @@ void LogView::setLoggingEnabled(bool enabled)
     if(enabled)
     {
         loggingEnabled = true;
-        GuiAddStatusBarMessage(tr("Logging will be enabled.\n").toUtf8().constData());
+        GuiAddLogMessage(tr("Logging will be enabled.\n").toUtf8().constData());
     }
     else
     {
-        GuiAddStatusBarMessage(tr("Logging will be disabled.\n").toUtf8().constData());
+        GuiAddLogMessage(tr("Logging will be disabled.\n").toUtf8().constData());
         loggingEnabled = false;
     }
 }
@@ -434,18 +431,13 @@ void LogView::flushTimerSlot()
     counter--;
     if(counter == 0)
     {
-        if(document()->characterCount() > MAX_LOG_BUFFER_SIZE)
+        if(document()->characterCount() > 1024 * 1024 * 100) //limit the log to ~100mb
             clear();
         counter = 100;
     }
-    QTextCursor cursor(document());
+    QTextCursor cursor = textCursor();
     cursor.movePosition(QTextCursor::End);
-    cursor.beginEditBlock();
-    cursor.insertBlock();
-    // hack to not insert too many newlines: https://lists.qt-project.org/pipermail/qt-interest-old/2011-July/034725.html
-    cursor.deletePreviousChar();
     cursor.insertHtml(logBuffer);
-    cursor.endEditBlock();
     if(autoScroll)
         moveCursor(QTextCursor::End);
     setUpdatesEnabled(true);
@@ -455,6 +447,5 @@ void LogView::flushTimerSlot()
 void LogView::flushLogSlot()
 {
     flushLog = true;
-    if(flushTimer->isActive())
-        flushTimerSlot();
+    flushTimerSlot();
 }

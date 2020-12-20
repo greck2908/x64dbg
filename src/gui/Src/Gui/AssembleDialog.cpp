@@ -79,10 +79,7 @@ void AssembleDialog::setOkButtonEnabled(bool enabled)
 
 void AssembleDialog::validateInstruction(QString expression)
 {
-    //sanitize the expression (just simplifying it by removing excess whitespaces)
-    expression = expression.simplified();
-
-    if(!expression.length())
+    if(!ui->lineEdit->text().length())
     {
         emit mValidateThread->emitInstructionChanged(0, tr("empty instruction"));
         return;
@@ -100,7 +97,7 @@ void AssembleDialog::validateInstruction(QString expression)
     selectedInstructionSize = basicInstrInfo.size;
 
     // Get typed in instruction size
-    if(!DbgFunctions()->Assemble(mSelectedInstrVa, NULL, &typedInstructionSize, expression.toUtf8().constData(), error.data())  || selectedInstructionSize == 0)
+    if(!DbgFunctions()->Assemble(mSelectedInstrVa, NULL, &typedInstructionSize, ui->lineEdit->text().toUtf8().constData(), error.data())  || selectedInstructionSize == 0)
     {
         emit mValidateThread->emitInstructionChanged(0, QString(error));
         return;

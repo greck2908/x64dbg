@@ -36,10 +36,6 @@ HexDump::HexDump(QWidget* parent)
     mNonprintReplace = QChar('.'); //QChar(0x25CA);
     mNullReplace = QChar('.'); //QChar(0x2022);
 
-    const auto updateCacheDataSize = 0x1000;
-    mUpdateCacheData.resize(updateCacheDataSize);
-    mUpdateCacheTemp.resize(updateCacheDataSize);
-
     // Slots
     connect(Bridge::getBridge(), SIGNAL(updateDump()), this, SLOT(updateDumpSlot()));
     connect(Bridge::getBridge(), SIGNAL(dbgStateChanged(DBGSTATE)), this, SLOT(debugStateChanged(DBGSTATE)));
@@ -112,33 +108,6 @@ void HexDump::updateDumpSlot()
                 && DbgMemIsValidReadPtr(syncAddr))
         {
             printDumpAt(syncAddr, false, false, true);
-        }
-    }
-    UpdateCache cur;
-    cur.memBase = mMemPage->getBase();
-    cur.memSize = mMemPage->getSize();
-    if(cur.memBase)
-    {
-        cur.rva = getTableOffsetRva();
-        cur.size = getBytePerRowCount() * getViewableRowsCount();
-        if(cur.size < mUpdateCacheData.size())
-        {
-            if(mMemPage->read(mUpdateCacheTemp.data(), cur.rva, cur.size))
-            {
-                if(mUpdateCache == cur && memcmp(mUpdateCacheData.data(), mUpdateCacheTemp.data(), cur.size) == 0)
-                {
-                    // same view and same data, do not reload
-                    return;
-                }
-                else
-                {
-                    mUpdateCache = cur;
-                    mUpdateCacheData.swap(mUpdateCacheTemp);
-#ifdef DEBUG
-                    OutputDebugStringA(QString("[x64dbg] %1[%2] %3[%4]").arg(ToPtrString(mUpdateCache.memBase)).arg(ToHexString(mUpdateCache.memSize)).arg(ToPtrString(mUpdateCache.rva)).arg(ToHexString(mUpdateCache.size)).toUtf8().constData());
-#endif // DEBUG
-                }
-            }
         }
     }
     reloadData();
@@ -763,16 +732,16 @@ bool HexDump::isSelected(dsint rva) const
 void HexDump::getColumnRichText(int col, dsint rva, RichTextPainter::List & richText)
 {
     RichTextPainter::CustomRichText_t curData;
-    curData.underline = false;
+    curData.highlight = false;
     curData.flags = RichTextPainter::FlagAll;
     curData.textColor = mTextColor;
     curData.textBackground = Qt::transparent;
-    curData.underlineColor = Qt::transparent;
+    curData.highlightColor = Qt::transparent;
 
     RichTextPainter::CustomRichText_t spaceData;
-    spaceData.underline = false;
+    spaceData.highlight = false;
     spaceData.flags = RichTextPainter::FlagNone;
-    spaceData.underlineColor = Qt::transparent;
+    spaceData.highlightColor = Qt::transparent;
 
     if(!col) //address
     {
@@ -824,19 +793,19 @@ void HexDump::getColumnRichText(int col, dsint rva, RichTextPainter::List & rich
                     if(wI % sizeof(duint) == 0 && wByteCount == 1 && desc.data.byteMode == HexByte) //pointer underlining
                     {
                         auto ptr = *(duint*)(wData + wI * wByteCount);
-                        if(spaceData.underline = curData.underline = DbgMemIsValidReadPtr(ptr))
+                        if(spaceData.highlight = curData.highlight = DbgMemIsValidReadPtr(ptr))
                         {
                             auto codePage = DbgFunctions()->MemIsCodePage(ptr, false);
                             auto modbase = DbgFunctions()->ModBaseFromAddr(ptr);
                             if(modbase)
                             {
                                 if(DbgFunctions()->ModGetParty(modbase) == 1) //system
-                                    spaceData.underlineColor = curData.underlineColor = codePage ? mSystemModuleCodePointerHighlightColor : mSystemModuleDataPointerHighlightColor;
+                                    spaceData.highlightColor = curData.highlightColor = codePage ? mSystemModuleCodePointerHighlightColor : mSystemModuleDataPointerHighlightColor;
                                 else //user
-                                    spaceData.underlineColor = curData.underlineColor = codePage ? mUserModuleCodePointerHighlightColor : mUserModuleDataPointerHighlightColor;
+                                    spaceData.highlightColor = curData.highlightColor = codePage ? mUserModuleCodePointerHighlightColor : mUserModuleDataPointerHighlightColor;
                             }
                             else
-                                spaceData.underlineColor = curData.underlineColor = codePage ? mUnknownCodePointerHighlightColor : mUnknownDataPointerHighlightColor;
+                                spaceData.highlightColor = curData.highlightColor = codePage ? mUnknownCodePointerHighlightColor : mUnknownDataPointerHighlightColor;
                         }
                     }
                     richText.push_back(curData);
@@ -844,7 +813,7 @@ void HexDump::getColumnRichText(int col, dsint rva, RichTextPainter::List & rich
                     {
                         spaceData.text = QString(' ');
                         if(wI % sizeof(duint) == sizeof(duint) - 1)
-                            spaceData.underline = false;
+                            spaceData.highlight = false;
                         richText.push_back(spaceData);
                     }
                 }
@@ -855,24 +824,6 @@ void HexDump::getColumnRichText(int col, dsint rva, RichTextPainter::List & rich
                         curData.text.append(' ');
                     richText.push_back(curData);
                 }
-            }
-        }
-
-        auto dataStartAddr = rvaToVa(rva);
-        auto dataEndAddr = dataStartAddr + wBufferByteCount - 1;
-
-        if(mUnderlineRangeStartVa && mUnderlineRangeEndVa)
-        {
-            // Check if the highlight ranges overlap
-            if(mUnderlineRangeStartVa <= dataEndAddr && dataStartAddr <= mUnderlineRangeEndVa)
-            {
-                for(RichTextPainter::CustomRichText_t & token : richText)
-                {
-                    token.underline = true;
-                    token.underlineColor = token.textColor;
-                }
-                while(richText.back().text == QStringLiteral(" "))
-                    richText.pop_back();
             }
         }
 

@@ -3,7 +3,7 @@
 
 #include <QDialog>
 
-class StdIconSearchListView;
+class StdSearchListView;
 class QMenu;
 class QAction;
 
@@ -28,18 +28,9 @@ private slots:
 
 private:
     Ui::AttachDialog* ui;
-    StdIconSearchListView* mSearchListView;
+    StdSearchListView* mSearchListView;
     QAction* mAttachAction;
     QAction* mRefreshAction;
-
-    enum
-    {
-        ColPid,
-        ColName,
-        ColTitle,
-        ColPath,
-        ColCommandLine,
-    };
 };
 
 #endif // ATTACHDIALOG_H

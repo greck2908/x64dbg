@@ -15,7 +15,6 @@
 #include "ActionHelpers.h"
 
 class CachedFontMetrics;
-class DisassemblyPopup;
 
 //Hacky class that fixes a really annoying cursor problem
 class AbstractTableScrollBar : public QScrollBar
@@ -44,7 +43,7 @@ public:
 
     // Constructor
     explicit AbstractTableView(QWidget* parent = 0);
-    virtual ~AbstractTableView() = default;
+    virtual ~AbstractTableView();
 
     // Configuration
     virtual void Initialize();
@@ -53,7 +52,6 @@ public:
 
     // Pure Virtual Methods
     virtual QString paintContent(QPainter* painter, dsint rowBase, int rowOffset, int col, int x, int y, int w, int h) = 0;
-    virtual QColor getCellColor(int r, int c);
 
     // Painting Stuff
     void paintEvent(QPaintEvent* event) override;
@@ -66,30 +64,27 @@ public:
     void wheelEvent(QWheelEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
-    void leaveEvent(QEvent* event) override;
-    void hideEvent(QHideEvent* event) override;
 
     // ScrollBar Management
-    virtual dsint sliderMovedHook(int type, dsint value, dsint delta); // can be made protected
-    int scaleFromUint64ToScrollBarRange(dsint value); // can be made private
-    dsint scaleFromScrollBarRangeToUint64(int value); // can be made private
-
-    void updateScrollBarRange(dsint range); // setRowCount+resizeEvent needs this, can be made private
+    virtual dsint sliderMovedHook(int type, dsint value, dsint delta);
+    int scaleFromUint64ToScrollBarRange(dsint value);
+    dsint scaleFromScrollBarRangeToUint64(int value);
+    void updateScrollBarRange(dsint range);
 
     // Coordinates Utils
-    int getIndexOffsetFromY(int y) const; // can be made protected
-    int getColumnIndexFromX(int x) const; // can be made protected
-    int getColumnPosition(int index) const; // can be made protected
-    int transY(int y) const; // can be made protected
-    int getViewableRowsCount() const; // can be made protected
+    int getIndexOffsetFromY(int y) const;
+    int getColumnIndexFromX(int x) const;
+    int getColumnPosition(int index) const;
+    int transY(int y) const;
+    int getViewableRowsCount() const;
     virtual int getLineToPrintcount() const;
 
     // New Columns/New Size
     virtual void addColumnAt(int width, const QString & title, bool isClickable);
     virtual void setRowCount(dsint count);
-    virtual void deleteAllColumns(); // can be made protected, although it makes sense as a public API
-    void setColTitle(int index, const QString & title); // can be deleted, although it makes sense as a public API
-    QString getColTitle(int index) const; // can be deleted, although it makes sense as a public API
+    virtual void deleteAllColumns();
+    void setColTitle(int index, const QString & title);
+    QString getColTitle(int index) const;
 
     // Getter & Setter
     dsint getRowCount() const;
@@ -99,9 +94,9 @@ public:
     void setColumnWidth(int index, int width);
     void setColumnOrder(int pos, int index);
     int getColumnOrder(int index) const;
-    int getHeaderHeight() const; // can be made protected
-    int getTableHeight() const; // can be made protected
-    int getGuiState() const; // can be made protected
+    int getHeaderHeight() const;
+    int getTableHeight() const;
+    int getGuiState() const;
     int getNbrOfLineToPrint() const;
     void setNbrOfLineToPrint(int parNbrOfLineToPrint);
     void setShowHeader(bool show);
@@ -112,7 +107,6 @@ public:
     void setDrawDebugOnly(bool value);
     bool getAllowPainting() const;
     void setAllowPainting(bool allow);
-    void setDisassemblyPopupEnabled(bool enable);
 
     // UI customization
     void loadColumnFromConfig(const QString & viewName);
@@ -125,8 +119,6 @@ public:
 
     // Update/Reload/Refresh/Repaint
     virtual void prepareData();
-
-    virtual duint getDisassemblyPopupAddress(int mousex, int mousey);
 
 signals:
     void enterPressedSignal();
@@ -143,10 +135,6 @@ public slots:
 
     // ScrollBar Management
     void vertSliderActionSlot(int action);
-
-protected slots:
-    void ShowDisassemblyPopup(duint addr, int x, int y); // this should probably be a slot, but doesn't need emit fixes (it's already used correctly)
-    void timerEvent(QTimerEvent* event);
 
 private slots:
     // Configuration
@@ -210,9 +198,7 @@ private:
 
     bool mShouldReload;
     bool mDrawDebugOnly;
-    bool mPopupEnabled;
     bool mAllowPainting;
-    int mPopupTimer;
 
     static int mMouseWheelScrollDelta;
     ScrollBar64 mScrollBarAttributes;
@@ -232,9 +218,6 @@ protected:
     // Font metrics
     CachedFontMetrics* mFontMetrics;
     void invalidateCachedFont();
-
-    // Disassembly Popup
-    DisassemblyPopup* mDisassemblyPopup;
 };
 
 #endif // ABSTRACTTABLEVIEW_H

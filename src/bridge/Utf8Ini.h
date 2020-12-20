@@ -23,7 +23,7 @@ public:
                 if(keyvalue.first.length())
                     appendLine(output, makeKeyValueText(keyvalue.first, keyvalue.second));
         }
-        return output;
+        return std::move(output);
     }
 
     /**
@@ -112,12 +112,12 @@ public:
             return false;
         auto found = mSections.find(trimmedSection);
         if(found != mSections.end())
-            found->second[std::move(trimmedKey)] = value;
+            found->second[trimmedKey] = value;
         else
         {
             KeyValueMap keyValueMap;
-            keyValueMap.emplace(std::move(trimmedKey), value);
-            mSections.emplace(std::move(trimmedSection), std::move(keyValueMap));
+            keyValueMap[trimmedKey] = value;
+            mSections[trimmedSection] = keyValueMap;
         }
         return true;
     }
@@ -179,7 +179,7 @@ public:
         sections.reserve(mSections.size());
         for(const auto & section : mSections)
             sections.push_back(section.first);
-        return sections;
+        return std::move(sections);
     }
 
     /**
@@ -201,7 +201,7 @@ public:
                     keys.push_back(key.first);
             }
         }
-        return keys;
+        return std::move(keys);
     }
 
 private:
@@ -317,7 +317,7 @@ private:
             }
         }
         escaped += "\"";
-        return escaped;
+        return std::move(escaped);
     }
 
     static inline std::string unescapeValue(const std::string & str)
@@ -360,7 +360,7 @@ private:
         }
         if(bEscaped)
             result += '\\';
-        return result;
+        return std::move(result);
     }
 };
 

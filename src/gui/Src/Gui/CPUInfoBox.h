@@ -5,14 +5,12 @@
 
 class WordEditDialog;
 class XrefBrowseDialog;
-class QBeaEngine;
 
 class CPUInfoBox : public StdTable
 {
     Q_OBJECT
 public:
-    explicit CPUInfoBox(QWidget* parent = 0);
-    ~CPUInfoBox();
+    explicit CPUInfoBox(StdTable* parent = 0);
     int getHeight();
     void addFollowMenuItem(QMenu* menu, QString name, duint value);
     void setupFollowMenu(QMenu* menu, duint wVA);
@@ -43,14 +41,12 @@ private:
     QString getInfoLine(int line);
     void clear();
     void setupContextMenu();
-    void setupShortcuts();
+
     XrefBrowseDialog* mXrefDlg = nullptr;
-    QBeaEngine* mDisasm;
 
     QAction* mCopyAddressAction;
     QAction* mCopyRvaAction;
     QAction* mCopyOffsetAction;
-    QAction* mCopyLineAction;
 };
 
 #endif // INFOBOX_H

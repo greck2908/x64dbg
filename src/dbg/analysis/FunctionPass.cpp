@@ -368,7 +368,7 @@ bool FunctionPass::ResolveFunctionEnd(FunctionDef* Function, BasicBlock* LastBlo
             }
         }
 
-        // Coherence check
+        // Sanity check
         ASSERT_TRUE(maximumAddr >= block->VirtualStart);
 
         // Does this node contain the maximum address?

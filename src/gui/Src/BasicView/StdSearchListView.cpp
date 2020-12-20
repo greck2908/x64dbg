@@ -1,13 +1,49 @@
 #include "StdSearchListView.h"
-#include "MethodInvoker.h"
+#include "StdTable.h"
+
+class StdTableSearchList : public AbstractSearchList
+{
+public:
+    friend class StdSearchListView;
+
+    StdTableSearchList()
+    {
+        mList = new StdTable();
+        mSearchList = new StdTable();
+    }
+
+    void lock() override { }
+    void unlock() override { }
+    AbstractStdTable* list() const override { return mList; }
+    AbstractStdTable* searchList() const override { return mSearchList; }
+
+    void filter(const QString & filter, FilterType type, int startColumn) override
+    {
+        mSearchList->setRowCount(0);
+        int rows = mList->getRowCount();
+        int columns = mList->getColumnCount();
+        for(int i = 0, j = 0; i < rows; i++)
+        {
+            if(rowMatchesFilter(filter, type, i, startColumn))
+            {
+                mSearchList->setRowCount(j + 1);
+                for(int k = 0; k < columns; k++)
+                {
+                    mSearchList->setCellContent(j, k, mList->getCellContent(i, k));
+                    mSearchList->setCellUserdata(j, k, mList->getCellUserdata(i, k));
+                }
+                j++;
+            }
+        }
+    }
+
+private:
+    StdTable* mList;
+    StdTable* mSearchList;
+};
 
 StdSearchListView::StdSearchListView(QWidget* parent, bool enableRegex, bool enableLock)
-    : StdSearchListView(parent, enableRegex, enableLock, new StdTableSearchList())
-{
-}
-
-StdSearchListView::StdSearchListView(QWidget* parent, bool enableRegex, bool enableLock, StdTableSearchList* tableSearchList)
-    : SearchListView(parent, mSearchListData = tableSearchList, enableRegex, enableLock)
+    : SearchListView(parent, mSearchListData = new StdTableSearchList(), enableRegex, enableLock)
 {
     setAddressColumn(0);
 }
@@ -27,10 +63,10 @@ int StdSearchListView::getCharWidth()
     return stdList()->getCharWidth();
 }
 
-void StdSearchListView::addColumnAt(int width, QString title, bool isClickable, QString copyTitle, StdTable::SortBy::t sortFn)
+void StdSearchListView::addColumnAt(int width, QString title, bool isClickable)
 {
-    stdList()->addColumnAt(width, title, isClickable, copyTitle, sortFn);
-    stdSearchList()->addColumnAt(width, title, isClickable, copyTitle, sortFn);
+    stdList()->addColumnAt(width, title, isClickable);
+    stdSearchList()->addColumnAt(width, title, isClickable);
 }
 
 void StdSearchListView::setDrawDebugOnly(bool value)
@@ -59,36 +95,27 @@ void StdSearchListView::loadColumnFromConfig(const QString & viewName)
 
 void StdSearchListView::setRowCount(dsint count)
 {
-    clearFilter();
+    mSearchBox->setText("");
     stdList()->setRowCount(count);
 }
 
 void StdSearchListView::setCellContent(int r, int c, QString s)
 {
-    clearFilter();
+    mSearchBox->setText("");
     stdList()->setCellContent(r, c, s);
 }
 
 void StdSearchListView::reloadData()
 {
-    clearFilter();
+    mSearchBox->setText("");
     stdList()->reloadData();
-    MethodInvoker::invokeMethod([this]()
-    {
-        stdList()->setFocus();
-    });
+    stdList()->setFocus();
 }
 
 void StdSearchListView::setSearchStartCol(int col)
 {
     if(col < stdList()->getColumnCount())
         mSearchStartCol = col;
-}
-
-bool StdSearchListView::setDisassemblyPopupEnabled(bool enabled)
-{
-    stdList()->setDisassemblyPopupEnabled(enabled);
-    return stdSearchList()->setDisassemblyPopupEnabled(enabled);
 }
 
 StdTable* StdSearchListView::stdList()

@@ -12,4 +12,6 @@ bool cbInstrRefStr(int argc, char* argv[]);
 bool cbInstrRefFuncionPointer(int argc, char* argv[]);
 bool cbInstrModCallFind(int argc, char* argv[]);
 bool cbInstrGUIDFind(int argc, char* argv[]);
+bool cbInstrYara(int argc, char* argv[]);
+bool cbInstrYaramod(int argc, char* argv[]);
 bool cbInstrSetMaxFindResult(int argc, char* argv[]);

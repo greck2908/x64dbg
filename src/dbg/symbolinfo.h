@@ -3,7 +3,8 @@
 
 #include "_global.h"
 
-extern duint symbolDownloadingBase;
+void InvalidateSymCache();
+//bool SymFromAddrCached(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFO Symbol);
 
 void SymEnum(duint Base, CBSYMBOLENUM EnumCallback, void* UserData);
 void SymEnumFromCache(duint Base, CBSYMBOLENUM EnumCallback, void* UserData);

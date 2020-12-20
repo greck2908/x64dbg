@@ -71,13 +71,15 @@ public:
 
     const CFGraph* GetFunctionGraph(duint entry) const
     {
-        auto itr = mFunctions.find(entry);
-        return itr == mFunctions.end() ? nullptr : &itr->second;
+        for(const auto & function : mFunctions)
+            if(function.entryPoint == entry)
+                return &function;
+        return nullptr;
     }
 
 protected:
     duint mEntryPoint;
-    std::unordered_map<duint, CFGraph> mFunctions;
+    std::vector<CFGraph> mFunctions;
 
 private:
     bool mUsePlugins;
@@ -91,16 +93,5 @@ private:
 
     std::vector<XREF> mXrefs;
 
-    struct LoopInfo
-    {
-        duint functionEntry = 0;
-        std::unordered_set<duint> trivialLoops; // loops to the same basic block
-        std::unordered_map<duint, duint> backedges; // backedges in the CFG
-    };
-
-    std::unordered_map<duint, LoopInfo> mLoopInfo;
-
     void analyzeFunction(duint entryPoint);
-    void analyzeLoops(duint entryPoint);
-    void dominatorAnalysis(duint entryPoint);
 };

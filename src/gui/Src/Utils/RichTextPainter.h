@@ -26,10 +26,10 @@ public:
         QColor textColor;
         QColor textBackground;
         CustomRichTextFlags flags;
-        bool underline;
-        QColor underlineColor;
-        int underlineWidth = 2;
-        bool underlineConnectPrev = false;
+        bool highlight;
+        QColor highlightColor;
+        int highlightWidth = 2;
+        bool highlightConnectPrev = false;
     };
 
     typedef std::vector<CustomRichText_t> List;

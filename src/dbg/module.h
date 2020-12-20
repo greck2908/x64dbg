@@ -64,9 +64,9 @@ struct MODEXPORT : SymbolInfoGui
 
 struct MODIMPORT : SymbolInfoGui
 {
-    size_t moduleIndex = 0; //index in MODINFO.importModules
-    DWORD iatRva = 0;
-    duint ordinal = -1; //equal to -1 if imported by name
+    size_t moduleIndex; //index in MODINFO.importModules
+    DWORD iatRva;
+    duint ordinal; //equal to -1 if imported by name
     String name;
     String undecoratedName;
 
@@ -90,17 +90,10 @@ struct MODINFO
     std::vector<MODSECTIONINFO> sections;
     std::vector<MODRELOCATIONINFO> relocations;
     std::vector<duint> tlsCallbacks;
-#if _WIN64
-    std::vector<RUNTIME_FUNCTION> runtimeFunctions; //sorted by (begin, end)
-
-    const RUNTIME_FUNCTION* findRuntimeFunction(DWORD rva) const;
-#endif // _WIN64
-
-    MODEXPORT entrySymbol;
 
     std::vector<MODEXPORT> exports;
     DWORD exportOrdinalBase = 0; //ordinal - 'exportOrdinalBase' = index in 'exports'
-    std::vector<NameIndex> exportsByName; //index in 'exports', sorted by export name
+    std::vector<size_t> exportsByName; //index in 'exports', sorted by export name
     std::vector<size_t> exportsByRva; //index in 'exports', sorted by rva
 
     std::vector<String> importModules;
@@ -118,7 +111,7 @@ struct MODINFO
     HANDLE fileMap = nullptr;
     ULONG_PTR fileMapVA = 0;
 
-    MODULEPARTY party;  // Party. Currently used value: 0: User, 1: System
+    int party;  // Party. Currently used value: 0: User, 1: System
 
     MODINFO()
     {
@@ -134,21 +127,17 @@ struct MODINFO
         GuiInvalidateSymbolSource(base);
     }
 
-    bool loadSymbols(const String & pdbPath, bool forceLoad);
+    bool loadSymbols();
     void unloadSymbols();
     void unmapFile();
-    const MODEXPORT* findExport(duint rva) const;
 };
 
-ULONG64 ModRvaToOffset(ULONG64 base, PIMAGE_NT_HEADERS ntHeaders, ULONG64 rva);
-bool ModLoad(duint Base, duint Size, const char* FullPath, bool loadSymbols = true);
+bool ModLoad(duint Base, duint Size, const char* FullPath);
 bool ModUnload(duint Base);
-void ModClear(bool updateGui = true);
+void ModClear();
 MODINFO* ModInfoFromAddr(duint Address);
 bool ModNameFromAddr(duint Address, char* Name, bool Extension);
 duint ModBaseFromAddr(duint Address);
-// Get a unique hash for an address in the module.
-// IMPORTANT: If you want to get a hash for the module base, pass the base
 duint ModHashFromAddr(duint Address);
 duint ModHashFromName(const char* Module);
 duint ModContentHashFromAddr(duint Address);
@@ -167,8 +156,8 @@ int ModPathFromName(const char* Module, char* Path, int Size);
 /// <param name="cbEnum">Enumeration function.</param>
 void ModEnum(const std::function<void(const MODINFO &)> & cbEnum);
 
-MODULEPARTY ModGetParty(duint Address);
-void ModSetParty(duint Address, MODULEPARTY Party);
+int ModGetParty(duint Address);
+void ModSetParty(duint Address, int Party);
 bool ModRelocationsFromAddr(duint Address, std::vector<MODRELOCATIONINFO> & Relocations);
 bool ModRelocationAtAddr(duint Address, MODRELOCATIONINFO* Relocation);
 bool ModRelocationsInRange(duint Address, duint Size, std::vector<MODRELOCATIONINFO> & Relocations);

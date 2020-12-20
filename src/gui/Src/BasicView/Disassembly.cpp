@@ -3,13 +3,12 @@
 #include "CodeFolding.h"
 #include "EncodeMap.h"
 #include "Bridge.h"
+#include "MainWindow.h"
 #include "CachedFontMetrics.h"
 #include "QBeaEngine.h"
 #include "MemoryPage.h"
 
-Disassembly::Disassembly(QWidget* parent, bool isMain)
-    : AbstractTableView(parent),
-      mIsMain(isMain)
+Disassembly::Disassembly(QWidget* parent) : AbstractTableView(parent), mDisassemblyPopup(this)
 {
     mMemPage = new MemoryPage(0, 0);
 
@@ -20,6 +19,8 @@ Disassembly::Disassembly(QWidget* parent, bool isMain)
 
     memset(&mSelection, 0, sizeof(SelectionData));
 
+    mCipRva = 0;
+
     mHighlightToken.text = "";
     mHighlightingMode = false;
     mShowMnemonicBrief = false;
@@ -29,10 +30,15 @@ Disassembly::Disassembly(QWidget* parent, bool isMain)
 
     mDisasm = new QBeaEngine(maxModuleSize);
     tokenizerConfigUpdatedSlot();
-    updateConfigSlot();
 
     mCodeFoldingManager = nullptr;
+    duint setting;
+    if(BridgeSettingGetUint("Gui", "DisableBranchDestinationPreview", &setting))
+        mPopupEnabled = !setting;
+    else
+        mPopupEnabled = true;
     mIsLastInstDisplayed = false;
+
     mGuiState = Disassembly::NoState;
 
     // Update fonts immediately because they are used in calculations
@@ -52,11 +58,10 @@ Disassembly::Disassembly(QWidget* parent, bool isMain)
     mXrefInfo.refcount = 0;
 
     // Slots
-    connect(Bridge::getBridge(), SIGNAL(updateDisassembly()), this, SLOT(reloadData()));
+    connect(Bridge::getBridge(), SIGNAL(repaintGui()), this, SLOT(reloadData()));
     connect(Bridge::getBridge(), SIGNAL(dbgStateChanged(DBGSTATE)), this, SLOT(debugStateChangedSlot(DBGSTATE)));
     connect(this, SIGNAL(selectionChanged(dsint)), this, SLOT(selectionChangedSlot(dsint)));
     connect(Config(), SIGNAL(tokenizerConfigUpdated()), this, SLOT(tokenizerConfigUpdatedSlot()));
-    connect(Config(), SIGNAL(guiOptionsUpdated()), this, SLOT(updateConfigSlot()));
 
     Initialize();
 }
@@ -98,6 +103,14 @@ void Disassembly::updateColors()
     mModifiedBytesBackgroundColor = ConfigColor("DisassemblyModifiedBytesBackgroundColor");
     mRestoredBytesColor = ConfigColor("DisassemblyRestoredBytesColor");
     mRestoredBytesBackgroundColor = ConfigColor("DisassemblyRestoredBytesBackgroundColor");
+    mByte00Color = ConfigColor("DisassemblyByte00Color");
+    mByte00BackgroundColor = ConfigColor("DisassemblyByte00BackgroundColor");
+    mByte7FColor = ConfigColor("DisassemblyByte7FColor");
+    mByte7FBackgroundColor = ConfigColor("DisassemblyByte7FBackgroundColor");
+    mByteFFColor = ConfigColor("DisassemblyByteFFColor");
+    mByteFFBackgroundColor = ConfigColor("DisassemblyByteFFBackgroundColor");
+    mByteIsPrintColor = ConfigColor("DisassemblyByteIsPrintColor");
+    mByteIsPrintBackgroundColor = ConfigColor("DisassemblyByteIsPrintBackgroundColor");
     mAutoCommentColor = ConfigColor("DisassemblyAutoCommentColor");
     mAutoCommentBackgroundColor = ConfigColor("DisassemblyAutoCommentBackgroundColor");
     mMnemonicBriefColor = ConfigColor("DisassemblyMnemonicBriefColor");
@@ -119,7 +132,7 @@ void Disassembly::updateColors()
     mConditionalTruePen = QPen(mConditionalJumpLineTrueColor);
     mConditionalFalsePen = QPen(mConditionalJumpLineFalseColor);
 
-    ZydisTokenizer::UpdateColors();
+    CapstoneTokenizer::UpdateColors();
     mDisasm->UpdateConfig();
 }
 
@@ -129,23 +142,12 @@ void Disassembly::updateFonts()
     invalidateCachedFont();
 }
 
-void Disassembly::updateConfigSlot()
-{
-    setDisassemblyPopupEnabled(!Config()->getBool("Disassembler", "NoBranchDisasmPreview"));
-}
-
 void Disassembly::tokenizerConfigUpdatedSlot()
 {
     mDisasm->UpdateConfig();
     mPermanentHighlightingMode = ConfigBool("Disassembler", "PermanentHighlightingMode");
     mNoCurrentModuleText = ConfigBool("Disassembler", "NoCurrentModuleText");
 }
-
-#define HANDLE_RANGE_TYPE(prefix, first, last) \
-    if(first == prefix ## _BEGIN && last == prefix ## _END) \
-        first = prefix ## _SINGLE; \
-    if(last == prefix ## _END && first != prefix ## _SINGLE) \
-        first = last
 
 /************************************************************************************
                             Reimplemented Functions
@@ -171,7 +173,7 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
 
     if(mHighlightingMode)
     {
-        QPen pen(Qt::red);
+        QPen pen(mInstructionHighlightColor);
         pen.setWidth(2);
         painter->setPen(pen);
         QRect rect = viewport()->rect();
@@ -214,7 +216,7 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
         QString addrText = getAddrText(cur_addr, label);
         BPXTYPE bpxtype = DbgGetBpxTypeAt(cur_addr);
         bool isbookmark = DbgGetBookmarkAt(cur_addr);
-        if(rvaToVa(mInstBuffer.at(rowOffset).rva) == mCipVa && !Bridge::getBridge()->mIsRunning && DbgMemFindBaseAddr(DbgValFromString("cip"), nullptr)) //cip + not running + valid cip
+        if(mInstBuffer.at(rowOffset).rva == mCipRva && !Bridge::getBridge()->mIsRunning && DbgMemFindBaseAddr(DbgValFromString("cip"), nullptr)) //cip + not running + valid cip
         {
             painter->fillRect(QRect(x, y, w, h), QBrush(mCipBackgroundColor));
             if(!isbookmark) //no bookmark
@@ -397,7 +399,8 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
         Function_t funcType;
         FUNCTYPE funcFirst = DbgGetFunctionTypeAt(cur_addr);
         FUNCTYPE funcLast = DbgGetFunctionTypeAt(cur_addr + instr.length - 1);
-        HANDLE_RANGE_TYPE(FUNC, funcFirst, funcLast);
+        if(funcLast == FUNC_END && funcFirst != FUNC_SINGLE)
+            funcFirst = funcLast;
         switch(funcFirst)
         {
         case FUNC_SINGLE:
@@ -421,26 +424,26 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
         painter->setPen(mFunctionPen);
 
         XREFTYPE refType = DbgGetXrefTypeAt(cur_addr);
-        char indicator;
+        QString indicator;
         if(refType == XREF_JMP)
         {
-            indicator = '>';
+            indicator = ">";
         }
         else if(refType == XREF_CALL)
         {
-            indicator = '$';
+            indicator = "$";
         }
         else if(funcType != Function_none)
         {
-            indicator = '.';
+            indicator = ".";
         }
         else
         {
-            indicator = ' ';
+            indicator = " ";
         }
 
         int charwidth = getCharWidth();
-        painter->drawText(QRect(x + funcsize, y, charwidth, h), Qt::AlignVCenter | Qt::AlignLeft, QString(indicator));
+        painter->drawText(QRect(x + funcsize, y, charwidth, h), Qt::AlignVCenter | Qt::AlignLeft, indicator);
         funcsize += charwidth;
 
         //draw jump arrows
@@ -448,7 +451,7 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
         int jumpsize = paintJumpsGraphic(painter, x + funcsize, y - 1, wRVA, branchType != Instruction_t::None && branchType != Instruction_t::Call); //jump line
 
         //draw bytes
-        auto richBytes = getRichBytes(instr, wIsSelected);
+        auto richBytes = getRichBytes(instr);
         RichTextPainter::paintRichText(painter, x, y, getColumnWidth(col), getRowHeight(), jumpsize + funcsize, richBytes, mFontMetrics);
     }
     break;
@@ -460,13 +463,11 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
 
         while(1) //paint all loop depths
         {
-            LOOPTYPE loopFirst = DbgGetLoopTypeAt(cur_addr, depth);
-            LOOPTYPE loopLast = DbgGetLoopTypeAt(cur_addr + mInstBuffer.at(rowOffset).length - 1, depth);
-            HANDLE_RANGE_TYPE(LOOP, loopFirst, loopLast);
-            if(loopFirst == LOOP_NONE)
+            LOOPTYPE loopType = DbgGetLoopTypeAt(cur_addr, depth);
+            if(loopType == LOOP_NONE)
                 break;
             Function_t funcType;
-            switch(loopFirst)
+            switch(loopType)
             {
             case LOOP_SINGLE:
                 funcType = Function_single;
@@ -486,16 +487,16 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
             default:
                 break;
             }
-            loopsize += paintFunctionGraphic(painter, x + loopsize, y, funcType, loopFirst != LOOP_SINGLE);
+            loopsize += paintFunctionGraphic(painter, x + loopsize, y, funcType, loopType != LOOP_SINGLE);
             depth++;
         }
 
         RichTextPainter::List richText;
         auto & token = mInstBuffer[rowOffset].tokens;
         if(mHighlightToken.text.length())
-            ZydisTokenizer::TokenToRichText(token, richText, &mHighlightToken);
+            CapstoneTokenizer::TokenToRichText(token, richText, &mHighlightToken);
         else
-            ZydisTokenizer::TokenToRichText(token, richText, 0);
+            CapstoneTokenizer::TokenToRichText(token, richText, 0);
         int xinc = 4;
         RichTextPainter::paintRichText(painter, x + loopsize, y, getColumnWidth(col) - loopsize, getRowHeight(), xinc, richText, mFontMetrics);
         token.x = x + loopsize + xinc;
@@ -508,7 +509,8 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
         Function_t funcType;
         ARGTYPE argFirst = DbgGetArgTypeAt(cur_addr);
         ARGTYPE argLast = DbgGetArgTypeAt(cur_addr + mInstBuffer.at(rowOffset).length - 1);
-        HANDLE_RANGE_TYPE(ARG, argFirst, argLast);
+        if(argLast == ARG_END && argFirst != ARG_SINGLE)
+            argFirst = argLast;
         switch(argFirst)
         {
         case ARG_SINGLE:
@@ -574,9 +576,9 @@ QString Disassembly::paintContent(QPainter* painter, dsint rowBase, int rowOffse
         {
             char brief[MAX_STRING_SIZE] = "";
             QString mnem;
-            for(const ZydisTokenizer::SingleToken & token : mInstBuffer.at(rowOffset).tokens.tokens)
+            for(const CapstoneTokenizer::SingleToken & token : mInstBuffer.at(rowOffset).tokens.tokens)
             {
-                if(token.type != ZydisTokenizer::TokenType::Space && token.type != ZydisTokenizer::TokenType::Prefix)
+                if(token.type != CapstoneTokenizer::TokenType::Space && token.type != CapstoneTokenizer::TokenType::Prefix)
                 {
                     mnem = token.text;
                     break;
@@ -672,38 +674,42 @@ void Disassembly::mouseMoveEvent(QMouseEvent* event)
             verticalScrollBar()->triggerAction(QAbstractSlider::SliderSingleStepSub);
         }
     }
+    else if(mGuiState == Disassembly::NoState)
+    {
+        if(!mHighlightingMode && mPopupEnabled)
+        {
+            bool popupShown = false;
+            if(y > getHeaderHeight() && getColumnIndexFromX(event->x()) == 2)
+            {
+                int rowOffset = getIndexOffsetFromY(transY(y));
+                if(rowOffset < mInstBuffer.size())
+                {
+                    CapstoneTokenizer::SingleToken token;
+                    auto & instruction = mInstBuffer.at(rowOffset);
+                    if(CapstoneTokenizer::TokenFromX(instruction.tokens, token, event->x(), mFontMetrics))
+                    {
+                        duint addr = token.value.value;
+                        bool isCodePage = DbgFunctions()->MemIsCodePage(addr, false);
+                        if(!isCodePage && instruction.branchDestination)
+                        {
+                            addr = instruction.branchDestination;
+                            isCodePage = DbgFunctions()->MemIsCodePage(addr, false);
+                        }
+                        if(isCodePage && (addr - mMemPage->getBase() < mInstBuffer.front().rva || addr - mMemPage->getBase() > mInstBuffer.back().rva))
+                        {
+                            ShowDisassemblyPopup(addr, event->x(), y);
+                            popupShown = true;
+                        }
+                    }
+                }
+            }
+            if(popupShown == false)
+                ShowDisassemblyPopup(0, 0, 0); // hide popup
+        }
+    }
 
     if(wAccept == true)
         AbstractTableView::mouseMoveEvent(event);
-}
-
-duint Disassembly::getDisassemblyPopupAddress(int mousex, int mousey)
-{
-    if(mHighlightingMode)
-        return 0; //Don't show this in highlight mode
-    if(getColumnIndexFromX(mousex) != 2)
-        return 0; //Disassembly popup for other column is undefined
-    int rowOffset = getIndexOffsetFromY(transY(mousey));
-    if(rowOffset < mInstBuffer.size())
-    {
-        ZydisTokenizer::SingleToken token;
-        auto & instruction = mInstBuffer.at(rowOffset);
-        if(ZydisTokenizer::TokenFromX(instruction.tokens, token, mousex, mFontMetrics))
-        {
-            duint addr = token.value.value;
-            bool isCodePage = DbgFunctions()->MemIsCodePage(addr, false);
-            if(!isCodePage && instruction.branchDestination)
-            {
-                addr = instruction.branchDestination;
-                isCodePage = DbgFunctions()->MemIsCodePage(addr, false);
-            }
-            if(isCodePage && (addr - mMemPage->getBase() < mInstBuffer.front().rva || addr - mMemPage->getBase() > mInstBuffer.back().rva))
-            {
-                return addr;
-            }
-        }
-    }
-    return 0;
 }
 
 /**
@@ -725,30 +731,30 @@ void Disassembly::mousePressEvent(QMouseEvent* event)
             int rowOffset = getIndexOffsetFromY(transY(event->y()));
             if(rowOffset < mInstBuffer.size())
             {
-                ZydisTokenizer::SingleToken token;
-                if(ZydisTokenizer::TokenFromX(mInstBuffer.at(rowOffset).tokens, token, event->x(), mFontMetrics))
+                CapstoneTokenizer::SingleToken token;
+                if(CapstoneTokenizer::TokenFromX(mInstBuffer.at(rowOffset).tokens, token, event->x(), mFontMetrics))
                 {
-                    if(ZydisTokenizer::IsHighlightableToken(token))
+                    if(CapstoneTokenizer::IsHighlightableToken(token))
                     {
-                        if(!ZydisTokenizer::TokenEquals(&token, &mHighlightToken) || event->button() == Qt::RightButton)
+                        if(!CapstoneTokenizer::TokenEquals(&token, &mHighlightToken) || event->button() == Qt::RightButton)
                             mHighlightToken = token;
                         else
-                            mHighlightToken = ZydisTokenizer::SingleToken();
+                            mHighlightToken = CapstoneTokenizer::SingleToken();
                     }
                     else if(!mPermanentHighlightingMode)
                     {
-                        mHighlightToken = ZydisTokenizer::SingleToken();
+                        mHighlightToken = CapstoneTokenizer::SingleToken();
                     }
                 }
                 else if(!mPermanentHighlightingMode)
                 {
-                    mHighlightToken = ZydisTokenizer::SingleToken();
+                    mHighlightToken = CapstoneTokenizer::SingleToken();
                 }
             }
         }
         else if(!mPermanentHighlightingMode)
         {
-            mHighlightToken = ZydisTokenizer::SingleToken();
+            mHighlightToken = CapstoneTokenizer::SingleToken();
         }
         if(!mPermanentHighlightingMode)
             return;
@@ -832,6 +838,12 @@ void Disassembly::mouseReleaseEvent(QMouseEvent* event)
         AbstractTableView::mouseReleaseEvent(event);
 }
 
+void Disassembly::leaveEvent(QEvent* event)
+{
+    ShowDisassemblyPopup(0, 0, 0);
+    AbstractTableView::leaveEvent(event);
+}
+
 /************************************************************************************
                             Keyboard Management
 ************************************************************************************/
@@ -846,22 +858,7 @@ void Disassembly::keyPressEvent(QKeyEvent* event)
 {
     int key = event->key();
 
-    if(event->modifiers() == (Qt::ControlModifier | Qt::AltModifier))
-    {
-        ShowDisassemblyPopup(0, 0, 0);
-
-        if(key == Qt::Key_Left)
-        {
-            setTableOffset(getTableOffset() - 1);
-        }
-        else if(key == Qt::Key_Right)
-        {
-            setTableOffset(getTableOffset() + 1);
-        }
-
-        updateViewport();
-    }
-    else if(key == Qt::Key_Up || key == Qt::Key_Down)
+    if(key == Qt::Key_Up || key == Qt::Key_Down)
     {
         ShowDisassemblyPopup(0, 0, 0);
 
@@ -875,7 +872,7 @@ void Disassembly::keyPressEvent(QKeyEvent* event)
         dsint initialStart = getSelectionStart();
 
         if(key == Qt::Key_Up)
-            selectPrevious(expand); //TODO: fix this shit to actually go to whatever the previous instruction shows
+            selectPrevious(expand);
         else
             selectNext(expand);
 
@@ -896,44 +893,11 @@ void Disassembly::keyPressEvent(QKeyEvent* event)
     else if(key == Qt::Key_Return || key == Qt::Key_Enter)
     {
         ShowDisassemblyPopup(0, 0, 0);
-        // Follow branch instruction
         duint dest = DbgGetBranchDestination(rvaToVa(getInitialSelection()));
-        if(DbgMemIsValidReadPtr(dest))
-        {
-            gotoAddress(dest);
+        if(!dest)
             return;
-        }
-        // Follow memory operand in dump
-        DISASM_INSTR instr;
-        DbgDisasmAt(rvaToVa(getInitialSelection()), &instr);
-        for(int op = instr.argcount - 1; op >= 0; op--)
-        {
-            if(instr.arg[op].type == arg_memory)
-            {
-                dest = instr.arg[op].value;
-                if(DbgMemIsValidReadPtr(dest))
-                {
-                    if(instr.arg[op].segment == SEG_SS)
-                        DbgCmdExec(QString("sdump %1").arg(ToPtrString(dest)));
-                    else
-                        DbgCmdExec(QString("dump %1").arg(ToPtrString(dest)));
-                    return;
-                }
-            }
-        }
-        // Follow constant in dump
-        for(int op = instr.argcount - 1; op >= 0; op--)
-        {
-            if(instr.arg[op].type == arg_normal)
-            {
-                dest = instr.arg[op].value;
-                if(DbgMemIsValidReadPtr(dest))
-                {
-                    DbgCmdExec(QString("dump %1").arg(ToPtrString(dest)));
-                    return;
-                }
-            }
-        }
+        QString cmd = "disasm " + ToPtrString(dest);
+        DbgCmdExec(cmd.toUtf8().constData());
     }
     else
         AbstractTableView::keyPressEvent(event);
@@ -1037,7 +1001,6 @@ int Disassembly::paintJumpsGraphic(QPainter* painter, int x, int y, dsint addr, 
     }
     else if(mXrefInfo.refcount > 0)
     {
-        // TODO: bad performance for sure, this code is also doing things in a super weird order...
         duint max = selVa, min = selVa;
         showXref = true;
         int jmpcount = 0;
@@ -1456,6 +1419,110 @@ Instruction_t Disassembly::DisassembleAt(dsint rva)
         return Instruction_t();
 
     return mDisasm->DisassembleAt((byte_t*)wBuffer.data(), wBuffer.size(), base, rva);
+
+    /* Zydis<->Capstone diff logic.
+     * TODO: Remove once transition is completed.
+
+    auto zy_instr = mDisasm->DisassembleAt((byte_t*)wBuffer.data(), wBuffer.size(), base, rva);
+    auto cs_instr = mCsDisasm->DisassembleAt((byte_t*)wBuffer.data(), wBuffer.size(), base, rva);
+
+    if(zy_instr.tokens.tokens != cs_instr.tokens.tokens)
+    {
+        if(zy_instr.instStr.startsWith("lea"))  // cs scales lea mem op incorrectly
+            goto _exit;
+        if(cs_instr.instStr.startsWith("movabs"))  // cs uses non-standard movabs mnem
+            goto _exit;
+        if(cs_instr.instStr.startsWith("lock") || cs_instr.instStr.startsWith("rep"))  // cs includes prefix in mnem
+            goto _exit;
+        if(cs_instr.instStr.startsWith('j') && cs_instr.length == 4)  // cs has AMD style handling of 66 branches
+            goto _exit;
+        if(cs_instr.instStr.startsWith("prefetchw"))  // cs uses m8 (AMD/intel doc), zy m512
+            goto _exit;                               // (doesn't matter, prefetch doesn't really have a size)
+        if(cs_instr.instStr.startsWith("xchg"))  // cs/zy print operands in different order (doesn't make any diff)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("rdpmc") ||
+                cs_instr.instStr.startsWith("in") ||
+                cs_instr.instStr.startsWith("out") ||
+                cs_instr.instStr.startsWith("sti") ||
+                cs_instr.instStr.startsWith("cli") ||
+                cs_instr.instStr.startsWith("iret")) // cs assumes priviliged, zydis doesn't (CPL is configurable for those)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("sal"))  // cs says sal, zydis say shl (both correct)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("xlat"))  // cs uses xlatb form, zydis xlat m8 form (both correct)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("lcall") ||
+                cs_instr.instStr.startsWith("ljmp") ||
+                cs_instr.instStr.startsWith("retf")) // cs uses "f" mnem-suffic, zydis has seperate "far" token
+            goto _exit;
+        if(cs_instr.instStr.startsWith("movsxd"))  // cs has wrong operand size (32) for 0x63 variant (e.g. "63646566")
+            goto _exit;
+        if(cs_instr.instStr.startsWith('j') && (cs_instr.dump[0] & 0x40) == 0x40)  // cs honors rex.w on jumps, truncating the
+            goto _exit;                                                         // target address to 32 bit (must be ignored)
+        if(cs_instr.instStr.startsWith("enter"))  // cs has wrong operand size (32)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("wait"))  // cs says wait, zy says fwait (both ok)
+            goto _exit;
+        if(cs_instr.dump.length() > 2 &&   // cs ignores segment prefixes if followed by branch hints
+                (cs_instr.dump[1] == '\x2e' ||
+                 cs_instr.dump[2] == '\x3e'))
+            goto _exit;
+        if(QRegExp("mov .s,.*").exactMatch(cs_instr.instStr) ||
+                cs_instr.instStr.startsWith("str") ||
+                QRegExp("pop .s").exactMatch(cs_instr.instStr)) // cs claims it's priviliged (it's not)
+            goto _exit;
+        if(QRegExp("l[defgs]s.*").exactMatch(cs_instr.instStr))  // cs allows LES (and friends) in 64 bit mode (invalid)
+            goto _exit;
+        if(QRegExp("f[^ ]+ st0.*").exactMatch(zy_instr.instStr))  // zy prints excplitic st0, cs omits (both ok)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("fstp"))  // CS reports 3 operands but only prints 2 ... wat.
+            goto _exit;
+        if(cs_instr.instStr.startsWith("fnstsw"))  // CS reports wrong 32 bit operand size (is 16)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("popaw")) // CS prints popaw, zydis popa (both ok)
+            goto _exit;
+        if(cs_instr.instStr.startsWith("lsl")) // CS thinks the 2. operand is 32 bit (it's 16)
+            goto _exit;
+        if(QRegExp("mov [cd]r\\d").exactMatch(cs_instr.instStr)) // CS fails to reject bad DR/CRs (that #UD, like dr4)
+            goto _exit;
+        if(QRegExp("v?comi(ps|pd|ss|sd).*").exactMatch(zy_instr.instStr)) // CS has wrong operand size
+            goto _exit;
+        if(QRegExp("v?cmp(ps|pd|ss|sd).*").exactMatch(zy_instr.instStr)) // CS uses pseudo-op notation, Zy prints cond as imm (both ok)
+            goto _exit;
+        if(cs_instr.dump.length() > 2 &&
+            cs_instr.dump[0] == '\x0f' &&
+            (cs_instr.dump[1] == '\x1a' || cs_instr.dump[1] == '\x1b')) // CS doesn't support MPX
+            goto _exit;
+
+        auto insn_hex = cs_instr.dump.toHex().toStdString();
+        auto cs = cs_instr.instStr.toStdString();
+        auto zy = zy_instr.instStr.toStdString();
+
+        for(auto zy_it = zy_instr.tokens.tokens.begin(), cs_it = cs_instr.tokens.tokens.begin()
+                ; zy_it != zy_instr.tokens.tokens.end() && cs_it != cs_instr.tokens.tokens.end()
+                ; ++zy_it, ++cs_it)
+        {
+            Zydis zd;
+            zd.Disassemble(0, (unsigned char*)zy_instr.dump.data(), zy_instr.length);
+
+            auto zy_tok_text = zy_it->text.toStdString();
+            auto cs_tok_text = cs_it->text.toStdString();
+
+            if(zy_tok_text == "bnd")  // cs doesn't support BND prefix
+                goto _exit;
+            if(zy_it->value.size != cs_it->value.size)  // imm sizes in CS are completely broken
+                goto _exit;
+
+            if(!(*zy_it == *cs_it))
+                __debugbreak();
+        }
+
+        //__debugbreak();
+    }
+
+    _exit:
+    return zy_instr;
+    */
 }
 
 /**
@@ -1660,7 +1727,7 @@ void Disassembly::prepareDataRange(dsint startRva, dsint endRva, const std::func
     }
 }
 
-RichTextPainter::List Disassembly::getRichBytes(const Instruction_t & instr, bool isSelected) const
+RichTextPainter::List Disassembly::getRichBytes(const Instruction_t & instr) const
 {
     RichTextPainter::List richBytes;
     std::vector<std::pair<size_t, bool>> realBytes;
@@ -1670,30 +1737,27 @@ RichTextPainter::List Disassembly::getRichBytes(const Instruction_t & instr, boo
     if(!richBytes.empty() && richBytes.back().text.endsWith(' '))
         richBytes.back().text.chop(1); //remove trailing space if exists
 
-    auto selectionFromVa = rvaToVa(mSelection.fromIndex);
-    auto selectionToVa = rvaToVa(mSelection.toIndex);
     for(size_t i = 0; i < richBytes.size(); i++)
     {
         auto byteIdx = realBytes[i].first;
-        auto byteAddr = cur_addr + byteIdx;
         auto isReal = realBytes[i].second;
         RichTextPainter::CustomRichText_t & curByte = richBytes.at(i);
         DBGRELOCATIONINFO relocInfo;
-        curByte.underlineColor = mDisassemblyRelocationUnderlineColor;
-        if(DbgFunctions()->ModRelocationAtAddr(byteAddr, &relocInfo))
+        curByte.highlightColor = mDisassemblyRelocationUnderlineColor;
+        if(DbgFunctions()->ModRelocationAtAddr(cur_addr + byteIdx, &relocInfo))
         {
-            bool prevInSameReloc = relocInfo.rva < byteAddr - DbgFunctions()->ModBaseFromAddr(byteAddr);
-            curByte.underline = isReal;
-            curByte.underlineConnectPrev = i > 0 && prevInSameReloc;
+            bool prevInSameReloc = relocInfo.rva < cur_addr + byteIdx - DbgFunctions()->ModBaseFromAddr(cur_addr + byteIdx);
+            curByte.highlight = isReal;
+            curByte.highlightConnectPrev = i > 0 && prevInSameReloc;
         }
         else
         {
-            curByte.underline = false;
-            curByte.underlineConnectPrev = false;
+            curByte.highlight = false;
+            curByte.highlightConnectPrev = false;
         }
 
         DBGPATCHINFO patchInfo;
-        if(isReal && DbgFunctions()->PatchGetEx(byteAddr, &patchInfo))
+        if(isReal && DbgFunctions()->PatchGetEx(cur_addr + byteIdx, &patchInfo))
         {
             if((unsigned char)(instr.dump.at(byteIdx)) == patchInfo.newbyte)
             {
@@ -1711,15 +1775,6 @@ RichTextPainter::List Disassembly::getRichBytes(const Instruction_t & instr, boo
             curByte.textColor = mBytesColor;
             curByte.textBackground = mBytesBackgroundColor;
         }
-
-        if(curByte.textBackground.alpha() == 0)
-        {
-            auto byteSelected = byteAddr >= selectionFromVa && byteAddr <= selectionToVa;
-            if(isSelected && !byteSelected)
-                curByte.textBackground = mBackgroundColor;
-            else if(!isSelected && byteSelected)
-                curByte.textBackground = mSelectionColor;
-        }
     }
 
     if(mCodeFoldingManager && mCodeFoldingManager->isFolded(cur_addr))
@@ -1727,10 +1782,10 @@ RichTextPainter::List Disassembly::getRichBytes(const Instruction_t & instr, boo
         RichTextPainter::CustomRichText_t curByte;
         curByte.textColor = mBytesColor;
         curByte.textBackground = mBytesBackgroundColor;
-        curByte.underlineColor = mDisassemblyRelocationUnderlineColor;
-        curByte.underlineWidth = 1;
+        curByte.highlightColor = mDisassemblyRelocationUnderlineColor;
+        curByte.highlightWidth = 1;
         curByte.flags = RichTextPainter::FlagAll;
-        curByte.underline = false;
+        curByte.highlight = false;
         curByte.textColor = mBytesColor;
         curByte.textBackground = mBytesBackgroundColor;
         curByte.text = "...";
@@ -1780,19 +1835,7 @@ duint Disassembly::rvaToVa(dsint rva) const
     return mMemPage->va(rva);
 }
 
-void Disassembly::gotoAddress(duint addr)
-{
-    disassembleAt(addr, true, -1);
-
-    if(mIsMain)
-    {
-        // Update window title
-        DbgCmdExecDirect(QString("guiupdatetitle %1").arg(ToPtrString(addr)));
-    }
-    GuiUpdateAllViews();
-}
-
-void Disassembly::disassembleAt(dsint parVA, bool history, dsint newTableOffset)
+void Disassembly::disassembleAt(dsint parVA, dsint parCIP, bool history, dsint newTableOffset)
 {
     duint wSize;
     auto wBase = DbgMemFindBaseAddr(parVA, &wSize);
@@ -1801,6 +1844,7 @@ void Disassembly::disassembleAt(dsint parVA, bool history, dsint newTableOffset)
     if(!wBase || !wSize || !DbgMemRead(parVA, &test, sizeof(test)))
         return;
     dsint wRVA = parVA - wBase;
+    dsint wCipRva = parCIP - wBase;
 
     HistoryData newHistory;
 
@@ -1821,6 +1865,7 @@ void Disassembly::disassembleAt(dsint parVA, bool history, dsint newTableOffset)
             mCurrentVa++;
             newHistory.va = selectionVA;
             newHistory.tableOffset = selectionTableOffset;
+            newHistory.windowTitle = MainWindow::windowTitle;
             mVaHistory.push_back(newHistory);
         }
     }
@@ -1837,6 +1882,9 @@ void Disassembly::disassembleAt(dsint parVA, bool history, dsint newTableOffset)
     setSingleSelection(wRVA);               // Selects disassembled instruction
     dsint wInstrSize = getInstructionRVA(wRVA, 1) - wRVA - 1;
     expandSelectionUpTo(wRVA + wInstrSize);
+
+    //set CIP rva
+    mCipRva = wCipRva;
 
     if(newTableOffset == -1) //nothing specified
     {
@@ -1879,6 +1927,7 @@ void Disassembly::disassembleAt(dsint parVA, bool history, dsint newTableOffset)
             //new disassembled address
             newHistory.va = parVA;
             newHistory.tableOffset = getTableOffset();
+            newHistory.windowTitle = MainWindow::windowTitle;
             if(mVaHistory.size())
             {
                 if(mVaHistory.last().va != parVA) //not 2x the same va in history
@@ -1909,6 +1958,7 @@ void Disassembly::disassembleAt(dsint parVA, bool history, dsint newTableOffset)
         MessageBoxA(GuiGetWindowHandle(), strList.toUtf8().constData(), QString().sprintf("mCurrentVa=%d", mCurrentVa).toUtf8().constData(), MB_ICONINFORMATION);
     }
     */
+    emit disassembledAt(parVA,  parCIP,  history,  newTableOffset);
 }
 
 QList<Instruction_t>* Disassembly::instructionsBuffer()
@@ -1916,22 +1966,25 @@ QList<Instruction_t>* Disassembly::instructionsBuffer()
     return &mInstBuffer;
 }
 
-void Disassembly::disassembleAtSlot(dsint parVA, dsint parCIP)
+const dsint Disassembly::currentEIP() const
+{
+    return mCipRva;
+}
+
+void Disassembly::disassembleAt(dsint parVA, dsint parCIP)
 {
     if(mCodeFoldingManager)
     {
         mCodeFoldingManager->expandFoldSegment(parVA);
         mCodeFoldingManager->expandFoldSegment(parCIP);
     }
-    mCipVa = parCIP;
-    if(mIsMain || !mMemPage->getBase())
-        disassembleAt(parVA, true, -1);
+    disassembleAt(parVA, parCIP, true, -1);
 }
 
 void Disassembly::disassembleClear()
 {
     mHighlightingMode = false;
-    mHighlightToken = ZydisTokenizer::SingleToken();
+    mHighlightToken = CapstoneTokenizer::SingleToken();
     historyClear();
     mMemPage->setAttributes(0, 0);
     mDisasm->getEncodeMap()->setMemoryRegion(0);
@@ -1981,14 +2034,11 @@ void Disassembly::historyPrevious()
     dsint va = mVaHistory.at(mCurrentVa).va;
     if(mCodeFoldingManager && mCodeFoldingManager->isFolded(va))
         mCodeFoldingManager->expandFoldSegment(va);
-    disassembleAt(va, false, mVaHistory.at(mCurrentVa).tableOffset);
+    disassembleAt(va, rvaToVa(mCipRva), false, mVaHistory.at(mCurrentVa).tableOffset);
 
-    if(mIsMain)
-    {
-        // Update window title
-        DbgCmdExecDirect(QString("guiupdatetitle %1").arg(ToPtrString(va)));
-        GuiUpdateAllViews();
-    }
+    // Update window title
+    emit updateWindowTitle(mVaHistory.at(mCurrentVa).windowTitle);
+    GuiUpdateAllViews();
 }
 
 void Disassembly::historyNext()
@@ -1999,14 +2049,11 @@ void Disassembly::historyNext()
     dsint va = mVaHistory.at(mCurrentVa).va;
     if(mCodeFoldingManager && mCodeFoldingManager->isFolded(va))
         mCodeFoldingManager->expandFoldSegment(va);
-    disassembleAt(va, false, mVaHistory.at(mCurrentVa).tableOffset);
+    disassembleAt(va, rvaToVa(mCipRva), false, mVaHistory.at(mCurrentVa).tableOffset);
 
-    if(mIsMain)
-    {
-        // Update window title
-        DbgCmdExecDirect(QString("guiupdatetitle %1").arg(ToPtrString(va)));
-        GuiUpdateAllViews();
-    }
+    // Update window title
+    emit updateWindowTitle(mVaHistory.at(mCurrentVa).windowTitle);
+    GuiUpdateAllViews();
 }
 
 bool Disassembly::historyHasPrevious() const
@@ -2095,7 +2142,22 @@ void Disassembly::unfold(dsint rva)
     }
 }
 
-bool Disassembly::hightlightToken(const ZydisTokenizer::SingleToken & token)
+
+void Disassembly::ShowDisassemblyPopup(duint addr, int x, int y)
+{
+    if(mDisassemblyPopup.getAddress() == addr)
+        return;
+    if(DbgMemIsValidReadPtr(addr))
+    {
+        mDisassemblyPopup.move(mapToGlobal(QPoint(x + 20, y + mFontMetrics->height() * 2)));
+        mDisassemblyPopup.setAddress(addr);
+        mDisassemblyPopup.show();
+    }
+    else
+        mDisassemblyPopup.hide();
+}
+
+bool Disassembly::hightlightToken(const CapstoneTokenizer::SingleToken & token)
 {
     mHighlightToken = token;
     mHighlightingMode = false;

@@ -6,6 +6,8 @@
 #include "jansson/jansson_x64dbg.h"
 #include <zydis_wrapper.h>
 
+class Capstone;
+
 class TraceRecordManager
 {
 public:
@@ -94,11 +96,11 @@ private:
     std::unordered_map<duint, TraceRecordPage> TraceRecord;
     std::vector<std::string> ModuleNames;
     unsigned int getModuleIndex(const String & moduleName);
-    unsigned int instructionCounter = 0;
+    unsigned int instructionCounter;
 
-    bool rtEnabled = false;
-    bool rtPrevInstAvailable = false;
-    HANDLE rtFile = nullptr;
+    bool rtEnabled;
+    bool rtPrevInstAvailable;
+    HANDLE rtFile;
 
     REGDUMPWORD rtOldContext;
     bool rtOldContextChanged[(FIELD_OFFSET(REGDUMP, lastError) + sizeof(DWORD)) / sizeof(duint)];
