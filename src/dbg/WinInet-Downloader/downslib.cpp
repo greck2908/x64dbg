@@ -21,7 +21,8 @@ downslib_error downslib_download(const char* url,
                                  const wchar_t* filename,
                                  const char* useragent,
                                  unsigned int timeout,
-                                 downslib_cb cb)
+                                 downslib_cb cb,
+                                 void* userdata)
 {
     HINTERNET hInternet = nullptr;
     HINTERNET hUrl = nullptr;
@@ -78,6 +79,7 @@ downslib_error downslib_download(const char* url,
 
     // Get HTTP content length
     char buffer[2048];
+    memset(buffer, 0, sizeof(buffer));
     DWORD dwLen = sizeof(buffer);
     unsigned long long total_bytes = 0;
     if(HttpQueryInfoA(hUrl, HTTP_QUERY_CONTENT_LENGTH, buffer, &dwLen, 0))
@@ -112,7 +114,7 @@ downslib_error downslib_download(const char* url,
             total_bytes = read_bytes;
 
         // Call the callback to report progress and cancellation
-        if(cb && !cb(read_bytes, total_bytes))
+        if(cb && !cb(userdata, read_bytes, total_bytes))
         {
             SetLastError(ERROR_OPERATION_ABORTED);
             return downslib_error::cancel;

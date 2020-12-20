@@ -623,11 +623,11 @@ bool setflag(const char* string, bool set)
         flag = 0x100000;
     else if(scmp(string, "id"))
         flag = 0x200000;
-    if(eflags & flag && !set)
-        xorval = flag;
-    else if(set)
-        xorval = flag;
-    return SetContextDataEx(hActiveThread, UE_CFLAGS, eflags ^ xorval);
+    if(set)
+        eflags |= flag;
+    else
+        eflags &= ~flag;
+    return SetContextDataEx(hActiveThread, UE_CFLAGS, eflags);
 }
 
 /**
@@ -1453,7 +1453,9 @@ bool valapifromstring(const char* name, duint* value, int* value_size, bool prin
         else
         {
             strncpy_s(modname, name, _TRUNCATE);
-            modname[apiname - name] = 0;
+            auto idx = apiname - name;
+            if(idx < _countof(modname))
+                modname[idx] = '\0';
         }
         apiname++;
         if(!strlen(apiname))

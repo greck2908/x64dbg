@@ -90,6 +90,25 @@ bool cbInstrAnalrecur(int argc, char* argv[])
     duint entry;
     if(!valfromstring(argv[1], &entry, false))
         return false;
+#ifdef _WIN64
+    // find the closest function
+    {
+        SHARED_ACQUIRE(LockModules);
+        auto info = ModInfoFromAddr(entry);
+        if(info)
+        {
+            DWORD rva = DWORD(entry - info->base);
+            auto runtimeFunction = info->findRuntimeFunction(rva);
+            if(runtimeFunction)
+            {
+                if(runtimeFunction->BeginAddress < rva)
+                {
+                    entry = info->base + runtimeFunction->BeginAddress;
+                }
+            }
+        }
+    }
+#endif // _WIN64
     duint size;
     auto base = MemFindBaseAddr(entry, &size);
     if(!base)
@@ -185,6 +204,69 @@ bool cbDebugDownloadSymbol(int argc, char* argv[])
     }
     GuiSymbolRefreshCurrent();
     dputs(QT_TRANSLATE_NOOP("DBG", "Done! See symbol log for more information"));
+    return true;
+}
+
+bool cbDebugLoadSymbol(int argc, char* argv[])
+{
+    if(IsArgumentsLessThan(argc, 3))
+        return false;
+    //get some module information
+    duint modbase = ModBaseFromName(argv[1]);
+    if(!modbase)
+    {
+        dprintf(QT_TRANSLATE_NOOP("DBG", "Invalid module \"%s\"!\n"), argv[1]);
+        return false;
+    }
+    auto pdbFile = argv[2];
+    if(!FileExists(pdbFile))
+    {
+        dputs(QT_TRANSLATE_NOOP("DBG", "File does not exist!"));
+        return false;
+    }
+    bool forceLoad = argc > 3 && DbgEval(argv[3]);
+    EXCLUSIVE_ACQUIRE(LockModules);
+    auto info = ModInfoFromAddr(modbase);
+    if(!info)
+    {
+        // TODO: this really isn't supposed to happen, but could if the module is suddenly unloaded
+        dputs("module not found...");
+        return false;
+    }
+
+    // trigger a symbol load
+    if(!info->loadSymbols(pdbFile, forceLoad))
+    {
+        dputs(QT_TRANSLATE_NOOP("DBG", "Symbol load failed... See symbol log for more information"));
+        return false;
+    }
+    GuiSymbolRefreshCurrent();
+    dputs(QT_TRANSLATE_NOOP("DBG", "Done! See symbol log for more information"));
+    return true;
+}
+
+bool cbDebugUnloadSymbol(int argc, char* argv[])
+{
+    if(IsArgumentsLessThan(argc, 2))
+        return false;
+    //get some module information
+    duint modbase = ModBaseFromName(argv[1]);
+    if(!modbase)
+    {
+        dprintf(QT_TRANSLATE_NOOP("DBG", "Invalid module \"%s\"!\n"), argv[1]);
+        return false;
+    }
+    EXCLUSIVE_ACQUIRE(LockModules);
+    auto info = ModInfoFromAddr(modbase);
+    if(!info)
+    {
+        // TODO: this really isn't supposed to happen, but could if the module is suddenly unloaded
+        dputs("module not found...");
+        return false;
+    }
+    info->unloadSymbols();
+    GuiRepaintTableView();
+    dputs(QT_TRANSLATE_NOOP("DBG", "Done!"));
     return true;
 }
 
